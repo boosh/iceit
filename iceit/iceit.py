@@ -124,22 +124,18 @@ class Encryptor(object):
 class FileFinder(object):
     "Finds files using different methods"
 
-    def __init__(self, path, recursive=False, group_by_directory=True):
+    def __init__(self, path, recursive=False):
         """
         @param string start - Path to scan
         @param bool recursive - Whether to scan recursively or just return
             files in the input directory.
-        @param bool group_by_directory - Group results by directory if true,
-            or return a single list of file paths if false. Only affects
-            recursive mode.
         """
         self.path = path
         self.recursive = recursive
-        self.group_by_directory = group_by_directory
         self.files = None
 
     def get_files(self):
-        "Return a dictionary of files for the given operating mode."
+        "Return a set of files for the given operating mode."
         if self.recursive:
             self.files = self.__get_files_recursive()
         else:
@@ -150,21 +146,16 @@ class FileFinder(object):
     def __get_files_non_recursive(self):
         "Only return files from the input directory."
         for (path, dirs, files) in os.walk(self.path):
-            return [os.path.join(path, f) for f in files]
+            return set([os.path.join(path, f) for f in files])
 
     def __get_files_recursive(self):
         "Return all matching files"
-        output = {}
+        output = set()
 
         for (path, dirs, files) in os.walk(self.path):
             full_files = [os.path.join(path, f) for f in files]
             if full_files:
-                if self.group_by_directory:
-                    output[path] = full_files
-                else:
-                    if not self.path in output.keys():
-                        output[self.path] = []
-                    output[self.path].extend(full_files)
+                output.update(full_files)
 
         return output
 
@@ -202,24 +193,26 @@ class IceIt(object):
         """
         Backup the given paths under the given config profile, optionally recursively.
         """
+        potential_files = set()
+        # find all files in the given paths and add to a set
         for path in  paths:
             log.info("Finding files in path %s (recursive=%s)" % (path, recursive))
             if os.path.isdir(path):
-                # find all files in the path
                 file_finder = FileFinder(path, recursive)
-                potential_files = file_finder.get_files()
+                potential_files.update(file_finder.get_files())
             else:
-                potential_files = path
-            print potential_files
-            # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
-            # been backed up previously and haven't since been modified, etc.
+                potential_files.update([path])
+        log.info("%d files found in %d paths" % (len(potential_files), len(paths)))
+
+        # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
+        # been backed up previously and haven't since been modified, etc.
 #            eligible_files = self.trim_ineligible_files(potential_files)
-            # Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
-            # need archiving into archives, compress files that should be compressed, encrypt files
-            # as necessary and obfuscate file names.
+        # Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
+        # need archiving into archives, compress files that should be compressed, encrypt files
+        # as necessary and obfuscate file names.
 #            self.process_files(eligible_files)
-            # upload to storage backend
-            # if all went well, save new catalogue to highly available storage backend
+        # upload to storage backend
+        # if all went well, save new catalogue to highly available storage backend
 
 # CLI application
 
