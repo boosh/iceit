@@ -14,11 +14,20 @@ import logging
 import os
 from Crypto.PublicKey import RSA
 from Crypto import Random
+import re
+import sqlite3
 
 log = logging.getLogger(__name__)
 
 if not log.handlers:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+
+class Catalogue(object):
+    """
+    Encapsulates the catalogue - the database of files stored, their modification times and hashes.
+    """
+    def __init__(self, dbpath):
+        self.conn = sqlite3.connect(dbpath)
 
 class Config(object):
     """
@@ -47,6 +56,14 @@ class Config(object):
         "Return the path to the private key file"
         return os.path.join(self.config_dir, 'private.key')
 
+    def get_catalogue_path(self):
+        "Return the full path to the catalogue file"
+        return os.path.join(self.config_dir, self.config.get('catalogue', 'name'))
+
+    def get(self, *args, **kwargs):
+        "Get a config value from the underlying config system"
+        return self.config.get(*args, **kwargs)
+
     def write_config_file(self, settings):
         """
         Create default config.
@@ -67,6 +84,11 @@ class Config(object):
         self.config.set("aws", "glacier_vault", settings['aws']['glacier_vault'])
 
         # default config values
+        if not self.config.has_section('catalogue'):
+            self.config.add_section('catalogue')
+            # name of the sqlite3 database file (under the config directory) to use as the catalogue
+            self.config.set('catalogue', 'name', 'catalogue.db')
+
         if not self.config.has_section('encryption'):
             self.config.add_section('encryption')
             # Whether to encrypt files or not
@@ -86,6 +108,8 @@ class Config(object):
             self.config.set('processing', 'min_files_per_directory_archive', '2')
             # Whether to obfuscate file names before uploading them
             self.config.set('processing', 'obfuscate_file_names', 'true')
+            # File patterns (as reg exes) to exclude from backing up. Separate multiple with commas.
+            self.config.set('processing', 'exclude_patterns', '^.*/desktop\.ini$')
 
         self.config.write(open(self.get_config_file_path(), "w"))
 
@@ -160,15 +184,37 @@ class FileFinder(object):
         return output
 
 
+class SetUtils(object):
+    "Provides utility methods on sets"
+
+    @staticmethod
+    def match_patterns(search_set, pattern):
+        "Return a new set containing elements from search_set that match the given regex pattern"
+        log.info("Excluding files matching pattern '%s'" % pattern)
+        matching_set = set()
+        regex = re.compile(pattern)
+        for item in search_set:
+            if regex.match(item) != None:
+                matching_set.add(item)
+
+        return matching_set
+
+
 class IceItException(Exception):
     "Base exception class"
     pass
 
 
 class IceIt(object):
-    def __init__(self, config_profile, config=None, encryptor=None):
-        self.config = config or Config(config_profile)
-        self.encryptor = encryptor or Encryptor()
+    def __init__(self, config_profile):
+        self.config = Config(config_profile)
+        self.encryptor = Encryptor()
+        self.catalogue = None           # Need to open it when need it because if there's no config we'll be in trouble
+
+    def __open_catalogue(self):
+        "Open the catalogue"
+        if not self.catalogue:
+            self.catalogue = Catalogue(self.config.get_catalogue_path())
 
     def write_config_file(self, settings):
         return self.config.write_config_file(settings)
@@ -189,6 +235,25 @@ class IceIt(object):
         "Return a boolean indicating whether the current config profile is valid and complete"
         return self.config.is_valid()
 
+    def __trim_ineligible_files(self, potential_files):
+        """
+        Return the supplied set with all files that shouldn't be backed up removed.
+        """
+        # apply configured exclude patterns
+        total_excluded = 0
+        exclude_patterns = self.config.get('processing', 'exclude_patterns').split(',')
+        for pattern in exclude_patterns:
+            remove_set = SetUtils.match_patterns(potential_files, pattern)
+            total_excluded += len(remove_set)
+            potential_files -= remove_set
+
+        log.info("%d files excluded by %d exclude patterns." % (total_excluded, len(exclude_patterns)))
+
+        if len(potential_files) == 0:
+            return
+
+        self.__open_catalogue()
+
     def backup(self, paths, recursive):
         """
         Backup the given paths under the given config profile, optionally recursively.
@@ -206,7 +271,7 @@ class IceIt(object):
 
         # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
         # been backed up previously and haven't since been modified, etc.
-#            eligible_files = self.trim_ineligible_files(potential_files)
+        eligible_files = self.__trim_ineligible_files(potential_files)
         # Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
         # need archiving into archives, compress files that should be compressed, encrypt files
         # as necessary and obfuscate file names.
