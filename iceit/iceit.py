@@ -198,6 +198,29 @@ class IceIt(object):
         "Return a boolean indicating whether the current config profile is valid and complete"
         return self.config.is_valid()
 
+    def backup(self, paths, recursive):
+        """
+        Backup the given paths under the given config profile, optionally recursively.
+        """
+        for path in  paths:
+            log.info("Finding files in path %s (recursive=%s)" % (path, recursive))
+            if os.path.isdir(path):
+                # find all files in the path
+                file_finder = FileFinder(path, recursive)
+                potential_files = file_finder.get_files()
+            else:
+                potential_files = path
+            print potential_files
+            # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
+            # been backed up previously and haven't since been modified, etc.
+#            eligible_files = self.trim_ineligible_files(potential_files)
+            # Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
+            # need archiving into archives, compress files that should be compressed, encrypt files
+            # as necessary and obfuscate file names.
+#            self.process_files(eligible_files)
+            # upload to storage backend
+            # if all went well, save new catalogue to highly available storage backend
+
 # CLI application
 
 app = aaargh.App(description="Compress, encrypt, obfuscate and archive files to Amazon S3/Glacier.")
@@ -249,11 +272,7 @@ def backup(profile, recursive, paths):
     if not iceit.is_configured():
         raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
 
-    for path in  paths:
-        log.info("Finding files in path %s (recursive=%s)" % (path, recursive))
-        # find all files in the path
-        file_finder = FileFinder(path, recursive)
-        print file_finder.get_files()
+    iceit.backup(paths, recursive)
 
 
 if __name__ == '__main__':
