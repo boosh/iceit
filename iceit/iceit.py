@@ -1,6 +1,6 @@
 #!/bin/env python
 
-# Put your files on ice. Compress, encrypt, obfuscate and archive on Amazon Glacier.
+# Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 
 import aaargh
 import boto.glacier
@@ -19,9 +19,13 @@ if not log.handlers:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
 class Config(object):
-    "Manages the application configuration"
-    def __init__(self, config_dir=os.path.expanduser("~/.iceit")):
-        self.config_dir = config_dir
+    """
+    Manages the application configuration. Different config profiles correspond to subdirectories of the
+    main config directory and allow different sets of configs to be used.
+    """
+    def __init__(self, config_profile, config_dir=os.path.expanduser("~/.iceit")):
+        self.config_profile = config_profile
+        self.config_dir = os.path.join(config_dir, self.config_profile)
         self.config = ConfigParser.SafeConfigParser()
         self.config.read(self.get_config_file_path())
 
@@ -44,7 +48,7 @@ class Config(object):
         @param settings - dict containing AWS credentials
         """
         if not os.path.isdir(self.config_dir):
-            os.mkdir(self.config_dir)
+            os.makedirs(self.config_dir)
 
         if not self.config.has_section('aws'):
             self.config.add_section("aws")
@@ -85,6 +89,8 @@ class Config(object):
 class Encryptor(object):
     """
     All crypto-related methods.
+
+    @todo - replace with gnupg
     """
     def generate_key_pair(self, length=2048, passphrase=None):
         """
@@ -115,8 +121,8 @@ class IceItException(Exception):
 
 
 class IceIt(object):
-    def __init__(self, config=None, encryptor=None):
-        self.config = config or Config()
+    def __init__(self, config_profile, config=None, encryptor=None):
+        self.config = config or Config(config_profile)
         self.encryptor = encryptor or Encryptor()
 
     def write_config_file(self, settings):
@@ -139,7 +145,9 @@ class IceIt(object):
 app = aaargh.App(description="Compress, encrypt, obfuscate and archive files to Amazon S3/Glacier.")
 
 @app.cmd(help="Set AWS S3/Glacier credentials.")
-def configure():
+@app.cmd_arg('-p', '--profile', default="default", type=str, help="Configuration profile name. "
+    "Configuration profiles allow you to back up different parts of your system using different settings.")
+def configure(profile):
     "Prompt for AWS credentials and write to config file"
     settings = {"aws": {}}
 
@@ -156,7 +164,7 @@ def configure():
     settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
     settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name: ")
 
-    iceit = IceIt()
+    iceit = IceIt(profile)
     iceit.write_config_file(settings)
 
     print "Config file written. Please edit it to change further options."
