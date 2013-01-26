@@ -1,6 +1,8 @@
 #!/bin/env python
 
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
+#
+# Inspired by duply/duplicity and bakthat.
 
 import aaargh
 import boto.glacier
@@ -28,6 +30,10 @@ class Config(object):
         self.config_dir = os.path.join(config_dir, self.config_profile)
         self.config = ConfigParser.SafeConfigParser()
         self.config.read(self.get_config_file_path())
+
+    def is_valid(self):
+        "Return a boolean indicating whether the current config profile exists and is valid"
+        return os.path.exists(self.get_config_file_path())
 
     def get_config_file_path(self):
         "Return the path to the config file"
@@ -115,6 +121,54 @@ class Encryptor(object):
         log.info("Private key written.")
 
 
+class FileFinder(object):
+    "Finds files using different methods"
+
+    def __init__(self, path, recursive=False, group_by_directory=True):
+        """
+        @param string start - Path to scan
+        @param bool recursive - Whether to scan recursively or just return
+            files in the input directory.
+        @param bool group_by_directory - Group results by directory if true,
+            or return a single list of file paths if false. Only affects
+            recursive mode.
+        """
+        self.path = path
+        self.recursive = recursive
+        self.group_by_directory = group_by_directory
+        self.files = None
+
+    def get_files(self):
+        "Return a dictionary of files for the given operating mode."
+        if self.recursive:
+            self.files = self.__get_files_recursive()
+        else:
+            self.files = self.__get_files_non_recursive()
+
+        return self.files
+
+    def __get_files_non_recursive(self):
+        "Only return files from the input directory."
+        for (path, dirs, files) in os.walk(self.path):
+            return [os.path.join(path, f) for f in files]
+
+    def __get_files_recursive(self):
+        "Return all matching files"
+        output = {}
+
+        for (path, dirs, files) in os.walk(self.path):
+            full_files = [os.path.join(path, f) for f in files]
+            if full_files:
+                if self.group_by_directory:
+                    output[path] = full_files
+                else:
+                    if not self.path in output.keys():
+                        output[self.path] = []
+                    output[self.path].extend(full_files)
+
+        return output
+
+
 class IceItException(Exception):
     "Base exception class"
     pass
@@ -140,13 +194,18 @@ class IceIt(object):
         "Export the key pair using the given passphrase to secure the private key"
         return self.encryptor.export_keys(self.config.get_public_key_path(), self.config.get_private_key_path(), passphrase)
 
+    def is_configured(self):
+        "Return a boolean indicating whether the current config profile is valid and complete"
+        return self.config.is_valid()
+
 # CLI application
 
 app = aaargh.App(description="Compress, encrypt, obfuscate and archive files to Amazon S3/Glacier.")
 
 @app.cmd(help="Set AWS S3/Glacier credentials.")
-@app.cmd_arg('-p', '--profile', default="default", type=str, help="Configuration profile name. "
-    "Configuration profiles allow you to back up different parts of your system using different settings.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                        "profiles allow you to back up different parts of "
+                                        "your system using different settings.")
 def configure(profile):
     "Prompt for AWS credentials and write to config file"
     settings = {"aws": {}}
@@ -178,6 +237,24 @@ def configure(profile):
         if passphrase_1 != passphrase_2:
             raise IceItException("Passphrases don't match.")
         iceit.export_keys(passphrase_1)
+
+@app.cmd(help="Backup the given path(s) using the specified backup profile.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                        "profiles allow you to back up different parts of "
+                                        "your system using different settings.")
+@app.cmd_arg('-r', '--recursive', action="store_true", help="Backup directories recursively")
+@app.cmd_arg('paths', type=str, nargs="+", help="Directories/files to backup")
+def backup(profile, recursive, paths):
+    iceit = IceIt(profile)
+    if not iceit.is_configured():
+        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+
+    for path in  paths:
+        log.info("Finding files in path %s (recursive=%s)" % (path, recursive))
+        # find all files in the path
+        file_finder = FileFinder(path, recursive)
+        print file_finder.get_files()
+
 
 if __name__ == '__main__':
     app.run()
