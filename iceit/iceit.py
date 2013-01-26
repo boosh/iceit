@@ -14,8 +14,10 @@ import logging
 import os
 from Crypto.PublicKey import RSA
 from Crypto import Random
+import random
 import re
-import sqlite3
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
+import string
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +29,38 @@ class Catalogue(object):
     Encapsulates the catalogue - the database of files stored, their modification times and hashes.
     """
     def __init__(self, dbpath):
-        self.conn = sqlite3.connect(dbpath)
+        self.tables = {}
+        self.engine = create_engine('sqlite:///%s' % dbpath)
+        self.__create_tables()
+
+        self.conn = self.engine.connect()
+
+    def __create_tables(self):
+        "Create necessary tables"
+        log.info("Creating DB tables...")
+        metadata = MetaData()
+        self.tables['files'] = Table('files', metadata,
+            Column('id', Integer, primary_key=True),
+            Column('path', String),
+            Column('obfuscated_name', String),
+            Column('file_mtime', DateTime),
+            Column('hash', String),
+            Column('last_backed_up', DateTime)
+        )
+
+        metadata.create_all(self.engine)
+        log.info("DB tables created...")
+
+    def get(self, file_path):
+        "Get a file entry or return an empty list if not found"
+        file_table = self.tables['files']
+        query = select([file_table], file_table.c.path==file_path)
+        result = self.conn.execute(query)
+
+        rows = result.fetchall()
+
+        print rows
+
 
 class Config(object):
     """
@@ -200,6 +233,15 @@ class SetUtils(object):
         return matching_set
 
 
+class StringUtils(object):
+    "Utilities on strings"
+
+    @staticmethod
+    def get_random_string(length=32):
+        return ''.join(random.choice(
+            string.ascii_letters + string.digits) for x in range(length))
+
+
 class IceItException(Exception):
     "Base exception class"
     pass
@@ -254,6 +296,41 @@ class IceIt(object):
 
         self.__open_catalogue()
 
+        for file in potential_files:
+            existing_backups = self.catalogue.get(file)
+            if len(existing_backups):
+                # if the mtime hasn't changed, remove from potential_files
+
+                # if it has, hash the file and remove from potential_files if the old and current hashes are the same
+
+# @todo - complete this once there is data in the catalogue
+                pass
+
+    def __process_files(self, eligible_files):
+        """
+        Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
+        need archiving into archives, compress files that should be compressed, encrypt files as necessary and
+        obfuscate file names.
+        """
+        # iterate over the file list building a dictionary of metadata about whether the file should be added to
+        # an archive, compressed, encrypted, etc.
+        for file in eligible_files:
+# @todo - implement this and create a new data structure
+
+        for file, metadata in new_data_structure_from_the_above_step:
+# @todo - implement this
+            # combine files into archives as necessary
+
+            # compress files
+
+            # encrypt files
+
+            obfuscated_name = StringUtils.get_random_string()
+            # update the catalogue, but don't commit until all files are processed (although uploading may
+            # subsequently fail)
+
+
+
     def backup(self, paths, recursive):
         """
         Backup the given paths under the given config profile, optionally recursively.
@@ -275,7 +352,7 @@ class IceIt(object):
         # Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
         # need archiving into archives, compress files that should be compressed, encrypt files
         # as necessary and obfuscate file names.
-#            self.process_files(eligible_files)
+        self.__process_files(eligible_files)
         # upload to storage backend
         # if all went well, save new catalogue to highly available storage backend
 
