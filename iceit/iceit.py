@@ -8,6 +8,7 @@ import aaargh
 import boto.glacier
 import boto.s3
 from boto.s3.connection import Location
+from bz2 import BZ2File
 import ConfigParser
 import getpass
 import logging
@@ -18,6 +19,7 @@ import random
 import re
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
 import string
+from tempfile import mkstemp, mkdtemp
 
 log = logging.getLogger(__name__)
 
@@ -58,8 +60,6 @@ class Catalogue(object):
         result = self.conn.execute(query)
 
         rows = result.fetchall()
-
-        print rows
 
 
 class Config(object):
@@ -133,12 +133,12 @@ class Config(object):
 
         if not self.config.has_section('processing'):
             self.config.add_section('processing')
-            # files whose extensions match the following regexes will not be compressed
-            self.config.set('processing', 'disable_compression_extensions', 'avi,mp4,mpe?g,jpe?g,mp3,bz2,gz(ip)?')
+            # absolute files names matching the following regexes will not be compressed
+            self.config.set('processing', 'disable_compression_patterns', '\.avi$,\.mp(3|4)$,\.mpe?g$,\.jpe?g$,\.bz2$,\.gz(ip)?$')
             # Whether to create a single archive per directory (True), or to process files individually
-            self.config.set('processing', 'create_one_archive_per_directory', 'true')
+#            self.config.set('processing', 'create_one_archive_per_directory', 'true')
             # The minimum number of files to add to an archive when creating one per directory automatically
-            self.config.set('processing', 'min_files_per_directory_archive', '2')
+#            self.config.set('processing', 'min_files_per_directory_archive', '2')
             # Whether to obfuscate file names before uploading them
             self.config.set('processing', 'obfuscate_file_names', 'true')
             # File patterns (as reg exes) to exclude from backing up. Separate multiple with commas.
@@ -176,6 +176,23 @@ class Encryptor(object):
         with open(private_key_path, 'w') as private_key_file:
             private_key_file.write(self.key.exportKey('PEM', passphrase))
         log.info("Private key written.")
+
+    def encrypt(self, input_file, output_dir, output_extension=".enc"):
+        """
+        Encrypt the given file using the public key.
+
+        @param string input_file - The file to encrypt.
+        @param string output_dir - The file to write the encrypted file to.
+        @param string output_extension - An extension to append to the file
+        """
+# @todo - reimplement
+        encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
+        log.info("Encrypting %s to %s" % (input_file, encrypted_file_name))
+
+        os.rename(input_file, input_file + output_extension)
+
+        log.info("Encryption complete.")
+        return encrypted_file_name
 
 
 class FileFinder(object):
@@ -225,9 +242,9 @@ class SetUtils(object):
         "Return a new set containing elements from search_set that match the given regex pattern"
         log.info("Excluding files matching pattern '%s'" % pattern)
         matching_set = set()
-        regex = re.compile(pattern)
+        regex = re.compile(pattern, re.IGNORECASE)
         for item in search_set:
-            if regex.match(item) != None:
+            if regex.match(item) is not None:
                 matching_set.add(item)
 
         return matching_set
@@ -298,7 +315,7 @@ class IceIt(object):
 
         for file in potential_files:
             existing_backups = self.catalogue.get(file)
-            if len(existing_backups):
+            if existing_backups:
                 # if the mtime hasn't changed, remove from potential_files
 
                 # if it has, hash the file and remove from potential_files if the old and current hashes are the same
@@ -306,29 +323,84 @@ class IceIt(object):
 # @todo - complete this once there is data in the catalogue
                 pass
 
+        return potential_files
+
+    def __compress_file(self, input_file, output_dir):
+        """
+        Compress a file. A new temporary file will be created and the handle returned.
+
+        @param string input_file - File to compress
+        @param string output_dir - Directory to write compressed file to
+        @return File The temporary File object where the input was compressed to
+        """
+        (output_handle, output_path) = mkstemp(dir=output_dir)
+        log.info("Compressing file %s to %s" % (input_file, output_path))
+
+        with BZ2File(output_path, 'w') as archive:
+            with open(input_file, 'r') as file:
+                while True:
+                    data = file.read(1024*1024)
+                    if not data:
+                        break
+
+                    archive.write(data)
+
+        log.info("Compression finished.")
+
+        return output_path
+
+
     def __process_files(self, eligible_files):
         """
         Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
         need archiving into archives, compress files that should be compressed, encrypt files as necessary and
         obfuscate file names.
         """
-        # iterate over the file list building a dictionary of metadata about whether the file should be added to
-        # an archive, compressed, encrypted, etc.
-        for file in eligible_files:
-# @todo - implement this and create a new data structure
+        temp_dir = mkdtemp('iceit')
 
-        for file, metadata in new_data_structure_from_the_above_step:
-# @todo - implement this
-            # combine files into archives as necessary
+        # compile all disable_compression patterns
+        disable_compression_regexes = []
+        for pattern in self.config.get('processing', 'disable_compression_patterns').split(','):
+            disable_compression_regexes.append(re.compile(pattern, re.IGNORECASE))
 
-            # compress files
+        for file_name in eligible_files:
+            # compress files if they don't match any exclusion rules
+            compress_file = True
+            for regex in disable_compression_regexes:
+                if regex.match(file_name):
+                    log.info("File %s will not be compressed.")
+                    compress_file = False
+                    break
 
-            # encrypt files
+            # compress file
+            if compress_file:
+                file_name = self.__compress_file(file_name, temp_dir)
 
-            obfuscated_name = StringUtils.get_random_string()
-            # update the catalogue, but don't commit until all files are processed (although uploading may
-            # subsequently fail)
+            # encrypt file
+            if self.config.get('encryption', 'encrypt_files'):
+                file_name = self.encryptor.encrypt(file_name, temp_dir)
 
+            if self.config.get('processing', 'obfuscate_file_names'):
+                old_file_name = file_name
+                file_name = os.path.join(temp_dir, StringUtils.get_random_string())
+
+                # if the file is already in temp_dir, rename it
+                if old_file_name.startswith(temp_dir):
+                    log.info("Obfuscating file %s. Renaming to %s" % (old_file_name, os.path.basename(file_name)))
+                    os.rename(old_file_name, file_name)
+                else:
+                    # otherwise copy it to temp_dir
+# do i need to copy it or can i specify the name as a parameter to AWS?
+                    pass
+
+            # update the catalogue, but don't commit until the file has been uploaded
+            file_basename = os.path.basename(file_name)
+
+            # upload to storage backend
+
+            # commit catalogue changes
+            import sys
+            sys.exit(1)
 
 
     def backup(self, paths, recursive):
@@ -349,11 +421,10 @@ class IceIt(object):
         # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
         # been backed up previously and haven't since been modified, etc.
         eligible_files = self.__trim_ineligible_files(potential_files)
-        # Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
-        # need archiving into archives, compress files that should be compressed, encrypt files
-        # as necessary and obfuscate file names.
+        # Perform all necessary processing to backup the file, e.g. compress files that should be compressed,
+        # encrypt files as necessary, obfuscate file names and upload to storage backend.
         self.__process_files(eligible_files)
-        # upload to storage backend
+
         # if all went well, save new catalogue to highly available storage backend
 
 # CLI application
