@@ -10,6 +10,7 @@ import boto.s3
 from boto.s3.connection import Location
 from bz2 import BZ2File
 import ConfigParser
+from copy import copy
 from datetime import datetime
 import getpass
 import hashlib
@@ -59,10 +60,16 @@ class Catalogue(object):
     def get(self, file_path):
         "Get a file entry or return an empty list if not found"
         file_table = self.tables['files']
+
+        log.debug("Searching for file %s in catalogue..." % file_path)
         query = select([file_table], file_table.c.source_path==file_path)
         result = self.conn.execute(query)
 
         rows = result.fetchall()
+
+        log.debug("%d record(s) found." % len(rows))
+
+        return rows
 
     def add_item(self, item, id=None):
         """
@@ -117,6 +124,10 @@ class Config(object):
         "Get a config value from the underlying config system"
         return self.config.get(*args, **kwargs)
 
+    def getboolean(self, *args, **kwargs):
+        "Get a config value from the underlying config system"
+        return self.config.getboolean(*args, **kwargs)
+
     def write_config_file(self, settings):
         """
         Create default config.
@@ -147,7 +158,7 @@ class Config(object):
         if not self.config.has_section('encryption'):
             self.config.add_section('encryption')
             # Whether to encrypt files or not
-            self.config.set('encryption', 'encrypt_files', 'True')
+            self.config.set('encryption', 'encrypt_files', 'true')
             # path to public key
             self.config.set('encryption', 'public_key_path', self.get_public_key_path())
             # path to private key
@@ -156,7 +167,8 @@ class Config(object):
         if not self.config.has_section('processing'):
             self.config.add_section('processing')
             # absolute files names matching the following regexes will not be compressed
-            self.config.set('processing', 'disable_compression_patterns', '\.avi$,\.mp(3|4)$,\.mpe?g$,\.jpe?g$,\.bz2$,\.gz(ip)?$')
+            self.config.set('processing', 'disable_compression_patterns',
+                '^.*\.avi$,^.*\.mp(3|4)$,^.*\.mpe?g$,^.*\.jpe?g$,^.*\.bz2$,^.*\.gz(ip)?$')
             # Whether to create a single archive per directory (True), or to process files individually
 #            self.config.set('processing', 'create_one_archive_per_directory', 'true')
             # The minimum number of files to add to an archive when creating one per directory automatically
@@ -211,7 +223,11 @@ class Encryptor(object):
         encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
         log.info("Encrypting %s to %s" % (input_file, encrypted_file_name))
 
-        os.rename(input_file, input_file + output_extension)
+        if os.path.exists(input_file):
+            os.rename(input_file, input_file + output_extension)
+        else:
+            import shutil
+            shutil.copyfile(input_file, encrypted_file_name)
 
         log.info("Encryption complete.")
         return encrypted_file_name
@@ -331,21 +347,36 @@ class IceIt(object):
         log.info("%d files excluded by %d exclude patterns." % (total_excluded, len(exclude_patterns)))
 
         if len(potential_files) == 0:
-            return
+            return potential_files
 
         self.__open_catalogue()
 
-        for file in potential_files:
-            existing_backups = self.catalogue.get(file)
-            if existing_backups:
-                # if the mtime hasn't changed, remove from potential_files
+        eligible_files = copy(potential_files)
 
-                # if it has, hash the file and remove from potential_files if the old and current hashes are the same
+        for file_path in potential_files:
+            catalogue_item = self.catalogue.get(file_path)
+            if catalogue_item:
+                catalogue_item = catalogue_item[0]
+                # if the mtime hasn't changed, remove from eligible_files
+                log.info("File %s is already in the catalogue. Checking for changes..." % file_path)
+                current_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
 
-# @todo - complete this once there is data in the catalogue
-                pass
+                if catalogue_item.file_mtime == current_mtime:
+                    log.info("File has the same modification time as previous backup. Skipping.")
+                    eligible_files -= set([file_path])
+                    continue
 
-        return potential_files
+                # if it has, hash the file and remove from eligible_files if the old and current hashes are the same
+                log.info("File has a different modification time from previous backup. Checking hashes to confirm "
+                         "modifications...")
+                current_hash = self.__get_file_hash(file_path)
+
+                if catalogue_item.source_hash == current_hash:
+                    log.info("File hash matches hash of backed up file. File will NOT be backed up on this run.")
+                    eligible_files -= set([file_path])
+                    continue
+
+        return eligible_files
 
     def __compress_file(self, input_file, output_dir):
         """
@@ -404,7 +435,7 @@ class IceIt(object):
             source_path = file_name
             existing_catalogue_item = self.catalogue.get(source_path)
 
-            if self.config.get('catalogue', 'store_source_file_hashes'):
+            if self.config.getboolean('catalogue', 'store_source_file_hashes') is True:
                 log.info("Generating hash of source file %s" % file_name)
                 # get a hash of the input file so we know when we've restored a file that it has been successful
                 source_file_hash = self.__get_file_hash(file_name)
@@ -415,8 +446,9 @@ class IceIt(object):
             # compress files if they don't match any exclusion rules
             compress_file = True
             for regex in disable_compression_regexes:
-                if regex.match(file_name):
-                    log.info("File %s will not be compressed.")
+                log.debug("Checking whether file %s matches regex %s" % (file_name, regex))
+                if regex.match(file_name) is not None:
+                    log.info("Skipping compression of %s" % file_name)
                     compress_file = False
                     break
 
@@ -425,10 +457,10 @@ class IceIt(object):
                 file_name = self.__compress_file(file_name, temp_dir)
 
             # encrypt file
-            if self.config.get('encryption', 'encrypt_files'):
+            if self.config.getboolean('encryption', 'encrypt_files') is True:
                 file_name = self.encryptor.encrypt(file_name, temp_dir)
 
-            if self.config.get('processing', 'obfuscate_file_names'):
+            if self.config.getboolean('processing', 'obfuscate_file_names') is True:
                 old_file_name = file_name
                 file_name = os.path.join(temp_dir, StringUtils.get_random_string())
 
@@ -467,9 +499,8 @@ class IceIt(object):
                 'processed_hash': final_file_hash,
                 'last_backed_up': datetime.now()
             }, id=catalogue_item_id)
-            
-            import sys
-            sys.exit(1)
+
+        # remove temporary directory
 
 
     def backup(self, paths, recursive):
@@ -494,7 +525,8 @@ class IceIt(object):
         # encrypt files as necessary, obfuscate file names and upload to storage backend.
         self.__process_files(eligible_files)
 
-        # if all went well, save new catalogue to highly available storage backend
+        # if all went well, save new catalogue to highly available storage backend (S3)
+
 
 # CLI application
 
