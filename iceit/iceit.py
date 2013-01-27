@@ -10,6 +10,7 @@ import boto.s3
 from boto.s3.connection import Location
 from bz2 import BZ2File
 import ConfigParser
+from datetime import datetime
 import getpass
 import hashlib
 import logging
@@ -25,7 +26,7 @@ from tempfile import mkstemp, mkdtemp
 log = logging.getLogger(__name__)
 
 if not log.handlers:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
 class Catalogue(object):
     """
@@ -44,10 +45,11 @@ class Catalogue(object):
         metadata = MetaData()
         self.tables['files'] = Table('files', metadata,
             Column('id', Integer, primary_key=True),
-            Column('path', String),
-            Column('obfuscated_name', String),
+            Column('source_path', String),
+            Column('aws_archive_id', String),
             Column('file_mtime', DateTime),
-            Column('hash', String),
+            Column('source_hash', String),
+            Column('processed_hash', String),
             Column('last_backed_up', DateTime)
         )
 
@@ -57,10 +59,27 @@ class Catalogue(object):
     def get(self, file_path):
         "Get a file entry or return an empty list if not found"
         file_table = self.tables['files']
-        query = select([file_table], file_table.c.path==file_path)
+        query = select([file_table], file_table.c.source_path==file_path)
         result = self.conn.execute(query)
 
         rows = result.fetchall()
+
+    def add_item(self, item, id=None):
+        """
+        Add an item to the catalogue, or update the one with the given ID
+
+        @param dict item - A dictionary where keys correspond to column names in the 'files' table.
+        """
+        log.debug("Adding item to catalogue with data: %s" % item)
+        file_table = self.tables['files']
+        if id:
+            # update
+            query = file_table.update().where(file_table.c.id==id).values(item)
+        else:
+            # insert
+            query = file_table.insert().values(item)
+
+        return self.conn.execute(query)
 
 
 class Config(object):
@@ -382,6 +401,9 @@ class IceIt(object):
             disable_compression_regexes.append(re.compile(pattern, re.IGNORECASE))
 
         for file_name in eligible_files:
+            source_path = file_name
+            existing_catalogue_item = self.catalogue.get(source_path)
+
             if self.config.get('catalogue', 'store_source_file_hashes'):
                 log.info("Generating hash of source file %s" % file_name)
                 # get a hash of the input file so we know when we've restored a file that it has been successful
@@ -422,12 +444,30 @@ class IceIt(object):
             final_file_hash = self.__get_file_hash(file_name)
             log.info("Processed file SHA256 hash is %s" % final_file_hash)
 
-            # update the catalogue, but don't commit until the file has been uploaded
-            file_basename = os.path.basename(file_name)
-
             # upload to storage backend
+# @todo - add the AWS archive ID
+            aws_archive_id = None
 
-            # commit catalogue changes
+            # delete the temporary file or symlink
+            if file_name.startswith(temp_dir):
+                log.info("Deleting temporary file/symlink %s" % file_name)
+                # @todo - implement
+
+            try:
+                catalogue_item_id = existing_catalogue_item.id
+            except AttributeError:
+                catalogue_item_id = None
+
+            # update the catalogue
+            self.catalogue.add_item(item={
+                'source_path': source_path,
+                'aws_archive_id': aws_archive_id,
+                'file_mtime': datetime.fromtimestamp(os.path.getmtime(source_path)),
+                'source_hash': source_file_hash,
+                'processed_hash': final_file_hash,
+                'last_backed_up': datetime.now()
+            }, id=catalogue_item_id)
+            
             import sys
             sys.exit(1)
 
