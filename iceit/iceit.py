@@ -11,6 +11,7 @@ from boto.s3.connection import Location
 from bz2 import BZ2File
 import ConfigParser
 import getpass
+import hashlib
 import logging
 import os
 from Crypto.PublicKey import RSA
@@ -121,6 +122,8 @@ class Config(object):
             self.config.add_section('catalogue')
             # name of the sqlite3 database file (under the config directory) to use as the catalogue
             self.config.set('catalogue', 'name', 'catalogue.db')
+            # whether to store hashes of the source files in the catalogue
+            self.config.set('catalogue', 'store_source_file_hashes', 'true')
 
         if not self.config.has_section('encryption'):
             self.config.add_section('encryption')
@@ -349,6 +352,21 @@ class IceIt(object):
 
         return output_path
 
+    def __get_file_hash(self, file_path):
+        """
+        Generate a hash of the named file
+        """
+        hash = hashlib.sha256()
+        with open(file_path) as file:
+            while True:
+                data = file.read(1024*1024)
+                if not data:
+                    break
+
+                hash.update(data)
+
+        return hash.hexdigest()
+
 
     def __process_files(self, eligible_files):
         """
@@ -356,7 +374,7 @@ class IceIt(object):
         need archiving into archives, compress files that should be compressed, encrypt files as necessary and
         obfuscate file names.
         """
-        temp_dir = mkdtemp('iceit')
+        temp_dir = mkdtemp('-iceit')
 
         # compile all disable_compression patterns
         disable_compression_regexes = []
@@ -364,6 +382,14 @@ class IceIt(object):
             disable_compression_regexes.append(re.compile(pattern, re.IGNORECASE))
 
         for file_name in eligible_files:
+            if self.config.get('catalogue', 'store_source_file_hashes'):
+                log.info("Generating hash of source file %s" % file_name)
+                # get a hash of the input file so we know when we've restored a file that it has been successful
+                source_file_hash = self.__get_file_hash(file_name)
+                log.info("Source file SHA256 hash is %s" % source_file_hash)
+            else:
+                source_file_hash = None
+
             # compress files if they don't match any exclusion rules
             compress_file = True
             for regex in disable_compression_regexes:
@@ -389,9 +415,12 @@ class IceIt(object):
                     log.info("Obfuscating file %s. Renaming to %s" % (old_file_name, os.path.basename(file_name)))
                     os.rename(old_file_name, file_name)
                 else:
-                    # otherwise copy it to temp_dir
-# do i need to copy it or can i specify the name as a parameter to AWS?
-                    pass
+                    # otherwise create a symlink using the obfuscated name to the file to avoid having to copy it
+                    os.symlink(old_file_name, file_name)
+
+            log.info("Generating hash of final processed file %s" % file_name)
+            final_file_hash = self.__get_file_hash(file_name)
+            log.info("Processed file SHA256 hash is %s" % final_file_hash)
 
             # update the catalogue, but don't commit until the file has been uploaded
             file_basename = os.path.basename(file_name)
