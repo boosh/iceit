@@ -1,0 +1,8 @@
+SQLAlchemy==0.8.0b2
+aaargh==0.4
+argparse==1.2.1
+-e git://github.com/tsileo/bakthat.git@c7f2b450f4417e9fd3200390cbc773d682dab7dc#egg=bakthat-dev
+beefish==0.1.1
+boto==2.7.0
+pycrypto==2.6
+wsgiref==0.1.2
