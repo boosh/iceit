@@ -13,15 +13,15 @@ import ConfigParser
 from copy import copy
 from datetime import datetime
 import getpass
+import gnupg
 import hashlib
 import logging
 import os
-from Crypto.PublicKey import RSA
-from Crypto import Random
 import random
 import re
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
 import string
+import sys
 from tempfile import mkstemp, mkdtemp
 
 log = logging.getLogger(__name__)
@@ -157,12 +157,8 @@ class Config(object):
 
         if not self.config.has_section('encryption'):
             self.config.add_section('encryption')
-            # Whether to encrypt files or not
-            self.config.set('encryption', 'encrypt_files', 'true')
-            # path to public key
-            self.config.set('encryption', 'public_key_path', self.get_public_key_path())
-            # path to private key
-            self.config.set('encryption', 'private_key_path', self.get_private_key_path())
+            # ID of the key to use to encrypt files. Encryption will be disabled if blank
+            self.config.set('encryption', 'key_id', settings['encryption']['key_id'])
 
         if not self.config.has_section('processing'):
             self.config.add_section('processing')
@@ -189,18 +185,35 @@ class Encryptor(object):
 
     @todo - replace with gnupg
     """
-    def generate_key_pair(self, length=2048, passphrase=None):
+    def __init__(self):
+        self.gpg = gnupg.GPG()
+
+    def list_secret_keys(self):
+        "Return a list of secret keys"
+        return self.gpg.list_keys(True)
+
+    def generate_key_pair(self, key_type="RSA", length=4096, options={}):
         """
-        Generates an RSA key pair.
+        Generates a GPG key pair.
+
+        @param dict options - Must contain the following keys:
+            - name_real - Real name of the user identity represented by the key
+            - name_comment - A comment to attach to the user ID
+            - name_email - An email address for the user
         """
-        log.info("Generating RSA key pair")
-        self.key = RSA.generate(length, Random.new().read)
+        log.info("Generating GPG key pair")
+        input_data = self.gpg.gen_key_input(key_type=key_type, key_length=length, name_real=options['name_real'],
+            name_comment=options['name_comment'], name_email=options['name_email'])
+        self.key = self.gpg.gen_key(input_data)
         log.info("Key generated")
+        return self.key
 
     def export_keys(self, public_key_path, private_key_path, passphrase):
         """
         Export the public and private keys, with the private key protected by the given passphrase.
         """
+
+# @todo - update for gpg
         log.info("Writing public key to %s" % public_key_path)
         with open(public_key_path, 'w') as pub_key_file:
             pub_key_file.write(self.key.publickey().exportKey())
@@ -219,7 +232,7 @@ class Encryptor(object):
         @param string output_dir - The file to write the encrypted file to.
         @param string output_extension - An extension to append to the file
         """
-# @todo - reimplement
+# @todo - reimplement for gpg
         encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
         log.info("Encrypting %s to %s" % (input_file, encrypted_file_name))
 
@@ -320,9 +333,13 @@ class IceIt(object):
         "Returns a boolean indicating whether a key pair already exists"
         return os.path.exists(self.config.get_public_key_path()) or os.path.exists(self.config.get_private_key_path())
 
-    def generate_key_pair(self):
+    def generate_key_pair(self, key_type, length, options):
         "Generate a new key pair"
-        return self.encryptor.generate_key_pair()
+        return self.encryptor.generate_key_pair(key_type, length, options)
+
+    def list_secret_keys(self):
+        "List the secret keys"
+        return self.encryptor.list_secret_keys()
 
     def export_keys(self, passphrase):
         "Export the key pair using the given passphrase to secure the private key"
@@ -542,33 +559,62 @@ def configure(profile):
     "Prompt for AWS credentials and write to config file"
     settings = {"aws": {}}
 
-    settings['aws']['access_key'] = raw_input("AWS Access Key: ")
-    settings['aws']["secret_key"] = raw_input("AWS Secret Key: ")
-
-    s3_locations = [l for l in dir(Location) if not '_' in l]
-    print "S3 settings: The list of your files along with any encryption keys will be stored in S3."
-    settings['aws']["s3_location"] = raw_input("S3 location (possible values are %s): " % ', '.join(s3_locations))
-    settings['aws']["s3_bucket"] = raw_input("S3 Bucket Name: ")
-
-    glacier_regions = boto.glacier.regions()
-    print "Your files will be backed up to Glacier."
-    settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
-    settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name: ")
+#    settings['aws']['access_key'] = raw_input("AWS Access Key: ")
+#    settings['aws']["secret_key"] = raw_input("AWS Secret Key: ")
+#
+#    s3_locations = [l for l in dir(Location) if not '_' in l]
+#    print "S3 settings: The list of your files along with any encryption keys will be stored in S3."
+#    settings['aws']["s3_location"] = raw_input("S3 location (possible values are %s): " % ', '.join(s3_locations))
+#    settings['aws']["s3_bucket"] = raw_input("S3 Bucket Name: ")
+#
+#    glacier_regions = boto.glacier.regions()
+#    print "Your files will be backed up to Glacier."
+#    settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
+#    settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name: ")
 
     iceit = IceIt(profile)
+
+    secret_keys = iceit.list_secret_keys()
+    secret_key_id = "NEW"
+    if secret_keys:
+        # if there are keys, let the user select one
+        valid_responses = ["NEW", "NONE"]
+        print "GPG key ID to use for encryption. Enter NONE to disable encryption, NEW to create a new key pair, or one of the following IDs: "
+        print "%s " % ', '.join([k['keyid'] for k in secret_keys])
+        secret_key_id = raw_input()
+        secret_key_id = secret_key_id.strip().upper()
+
+        valid_responses += [k['keyid'] for k in secret_keys]
+        if not secret_key_id in valid_responses:
+            print "%s is not a valid response. Aborting."
+            sys.exit(1)
+
+    if secret_key_id == "NEW":
+        # generate a new key pair
+        print "We need some details to generate a new GPG key pair..."
+        key_options = {}
+        default_key_length = 2048
+        key_length = raw_input("Key length (default=%s): " % default_key_length)
+        if not key_length:
+            key_length = default_key_length
+        key_options['name_real'] = raw_input("Enter your name: ")
+        key_options['name_email'] = raw_input("Enter your email address: ")
+        key_options['name_comment'] = raw_input("Enter a comment to attach to the key: ")
+        key = iceit.generate_key_pair(key_type="RSA", length=key_length, options=key_options)
+
+        print "Generated key %s" % key.fingerprint
+
+        secret_key_id = key.fingerprint.strip()
+
+    if secret_key_id != "NONE":
+        settings['encryption']['key_id'] = secret_key_id
+
     iceit.write_config_file(settings)
 
     print "Config file written. Please edit it to change further options."
 
-    if not iceit.key_pair_exists():
-        iceit.generate_key_pair()
-        print "\nSecure your private key with a passphrase."
-        print "IMPORTANT: If you forget this passphrase there will be no way to recover your files! "
-        passphrase_1 = getpass.getpass("Enter a strong passphrase to secure your private key: ")
-        passphrase_2 = getpass.getpass("Enter again to confirm: ")
-        if passphrase_1 != passphrase_2:
-            raise IceItException("Passphrases don't match.")
-        iceit.export_keys(passphrase_1)
+    print "Exporting encryption keys to allow them to be backed up."
+    iceit.export_keys(secret_key_id)
 
 @app.cmd(help="Backup the given path(s) using the specified backup profile.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
