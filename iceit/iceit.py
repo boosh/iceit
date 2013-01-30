@@ -501,6 +501,8 @@ class IceIt(object):
             }, id=catalogue_item_id)
 
         # remove temporary directory
+        log.info("Deleting temporary directory %s" % temp_dir)
+#        os.rmdir(temp_dir)
 
 
     def backup(self, paths, recursive):
