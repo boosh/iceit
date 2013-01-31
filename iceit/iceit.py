@@ -195,6 +195,10 @@ class Encryptor(object):
         "Set the key ID"
         self.key_id = key_id
 
+    def get_key_id(self):
+        "Return the encryption key ID"
+        return self.key_id
+
     def list_secret_keys(self):
         "Return a list of secret keys"
         return self.gpg.list_keys(True)
@@ -244,7 +248,7 @@ class Encryptor(object):
 
         log.info("Private key written.")
 
-    def encrypt(self, input_file, output_dir, output_extension=".enc"):
+    def encrypt(self, input_file, output_dir, output_extension=".gpg"):
         """
         Encrypt the given file using the public key.
 
@@ -252,15 +256,20 @@ class Encryptor(object):
         @param string output_dir - The file to write the encrypted file to.
         @param string output_extension - An extension to append to the file
         """
-# @todo - reimplement for gpg
         encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
         log.info("Encrypting %s to %s" % (input_file, encrypted_file_name))
 
-        if os.path.exists(input_file):
-            os.rename(input_file, input_file + output_extension)
-        else:
-            import shutil
-            shutil.copyfile(input_file, encrypted_file_name)
+        if not self.key_id:
+            raise IceItException("Can't encrypt files. Set the key ID first.")
+
+        if not os.path.exists(input_file):
+            raise IceItException("Can't encrypt non-existent file '%s'" % input_file)
+
+        with open(input_file, 'r') as file:
+            self.gpg.encrypt_file(file, self.key_id, sign=self.key_id, armor=False, output=encrypted_file_name)
+
+        if not os.path.exists(encrypted_file_name) or os.path.getsize(encrypted_file_name) == 0:
+            raise IceItException("Failed to encrypt file. Perhaps you specified a key that needs a passphrase?")
 
         log.info("Encryption complete.")
         return encrypted_file_name
@@ -376,6 +385,14 @@ class IceIt(object):
     def is_configured(self):
         "Return a boolean indicating whether the current config profile is valid and complete"
         return self.config.is_valid()
+
+    def __encryption_enabled(self):
+        """
+        Returns a boolean indicating whether to encrypt files
+
+        @return boolean True if we should encrypt files
+        """
+        return len(self.encryptor.get_key_id()) > 0
 
     def __trim_ineligible_files(self, potential_files):
         """
@@ -502,7 +519,7 @@ class IceIt(object):
                 file_name = self.__compress_file(file_name, temp_dir)
 
             # encrypt file
-            if self.config.getboolean('encryption', 'encrypt_files') is True:
+            if self.__encryption_enabled():
                 file_name = self.encryptor.encrypt(file_name, temp_dir)
 
             if self.config.getboolean('processing', 'obfuscate_file_names') is True:
