@@ -157,8 +157,9 @@ class Config(object):
 
         if not self.config.has_section('encryption'):
             self.config.add_section('encryption')
-            # ID of the key to use to encrypt files. Encryption will be disabled if blank
-            self.config.set('encryption', 'key_id', settings['encryption']['key_id'])
+
+        # ID of the key to use to encrypt files. Encryption will be disabled if blank
+        self.config.set('encryption', 'key_id', settings['encryption']['key_id'])
 
         if not self.config.has_section('processing'):
             self.config.add_section('processing')
@@ -182,11 +183,17 @@ class Config(object):
 class Encryptor(object):
     """
     All crypto-related methods.
-
-    @todo - replace with gnupg
     """
-    def __init__(self):
+    def __init__(self, key_id):
+        """
+        @param string key_id - The ID of the key to use for encryption
+        """
         self.gpg = gnupg.GPG()
+        self.set_key_id(key_id)
+
+    def set_key_id(self, key_id):
+        "Set the key ID"
+        self.key_id = key_id
 
     def list_secret_keys(self):
         "Return a list of secret keys"
@@ -204,24 +211,28 @@ class Encryptor(object):
         log.info("Generating GPG key pair")
         input_data = self.gpg.gen_key_input(key_type=key_type, key_length=length, name_real=options['name_real'],
             name_comment=options['name_comment'], name_email=options['name_email'])
-        self.key = self.gpg.gen_key(input_data)
+        key = self.gpg.gen_key(input_data)
         log.info("Key generated")
-        return self.key
+        self.key_id = key.fingerprint.strip()
+        return self.key_id
 
-    def export_keys(self, public_key_path, private_key_path, passphrase):
+    def export_keys(self, public_key_dest, private_key_dest):
         """
-        Export the public and private keys, with the private key protected by the given passphrase.
-        """
+        Export the current key to files called public_key_dest and private_key_dest
 
-# @todo - update for gpg
-        log.info("Writing public key to %s" % public_key_path)
-        with open(public_key_path, 'w') as pub_key_file:
-            pub_key_file.write(self.key.publickey().exportKey())
+        @param string public_key_dest - Path to write the public key to
+        @param string private_key_dest - Path to write the private key to
+        """
+        log.info("Writing public key with ID %s to %s" % (self.key_id, public_key_dest))
+        with open(public_key_dest, 'w') as pub_key_file:
+            public_key = self.gpg.export_keys(self.key_id)
+            log.debug("Public key is %s" % public_key)
+            pub_key_file.write(public_key)
         log.info("Public key written.")
 
-        log.info("Writing private key to %s" % private_key_path)
-        with open(private_key_path, 'w') as private_key_file:
-            private_key_file.write(self.key.exportKey('PEM', passphrase))
+        log.info("Writing private key to %s" % private_key_dest)
+        with open(private_key_dest, 'w') as private_key_file:
+            private_key_file.write(self.gpg.export_keys(self.key_id, True))
         log.info("Private key written.")
 
     def encrypt(self, input_file, output_dir, output_extension=".enc"):
@@ -318,7 +329,11 @@ class IceItException(Exception):
 class IceIt(object):
     def __init__(self, config_profile):
         self.config = Config(config_profile)
-        self.encryptor = Encryptor()
+        try:
+            self.encryptor = Encryptor(self.config.get('encryption', 'key_id'))
+        except ConfigParser.NoSectionError:
+            self.encryptor = Encryptor(None)
+
         self.catalogue = None           # Need to open it when need it because if there's no config we'll be in trouble
 
     def __open_catalogue(self):
@@ -341,9 +356,13 @@ class IceIt(object):
         "List the secret keys"
         return self.encryptor.list_secret_keys()
 
-    def export_keys(self, passphrase):
-        "Export the key pair using the given passphrase to secure the private key"
-        return self.encryptor.export_keys(self.config.get_public_key_path(), self.config.get_private_key_path(), passphrase)
+    def set_key_id(self, key_id):
+        "Set the ID of the key to use for encryption"
+        return self.encryptor.set_key_id(key_id)
+
+    def export_keys(self):
+        "Export the key pair"
+        return self.encryptor.export_keys(self.config.get_public_key_path(), self.config.get_private_key_path())
 
     def is_configured(self):
         "Return a boolean indicating whether the current config profile is valid and complete"
@@ -557,20 +576,23 @@ app = aaargh.App(description="Compress, encrypt, obfuscate and archive files to 
                                         "your system using different settings.")
 def configure(profile):
     "Prompt for AWS credentials and write to config file"
-    settings = {"aws": {}}
+    settings = {
+        "aws": {},
+        "encryption": {}
+    }
 
-#    settings['aws']['access_key'] = raw_input("AWS Access Key: ")
-#    settings['aws']["secret_key"] = raw_input("AWS Secret Key: ")
-#
-#    s3_locations = [l for l in dir(Location) if not '_' in l]
-#    print "S3 settings: The list of your files along with any encryption keys will be stored in S3."
-#    settings['aws']["s3_location"] = raw_input("S3 location (possible values are %s): " % ', '.join(s3_locations))
-#    settings['aws']["s3_bucket"] = raw_input("S3 Bucket Name: ")
-#
-#    glacier_regions = boto.glacier.regions()
-#    print "Your files will be backed up to Glacier."
-#    settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
-#    settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name: ")
+    settings['aws']['access_key'] = raw_input("AWS Access Key: ")
+    settings['aws']["secret_key"] = raw_input("AWS Secret Key: ")
+
+    s3_locations = [l for l in dir(Location) if not '_' in l]
+    print "S3 settings: The list of your files along with any encryption keys will be stored in S3."
+    settings['aws']["s3_location"] = raw_input("S3 location (possible values are %s): " % ', '.join(s3_locations))
+    settings['aws']["s3_bucket"] = raw_input("S3 Bucket Name: ")
+
+    glacier_regions = boto.glacier.regions()
+    print "Your files will be backed up to Glacier."
+    settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
+    settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name: ")
 
     iceit = IceIt(profile)
 
@@ -579,9 +601,9 @@ def configure(profile):
     if secret_keys:
         # if there are keys, let the user select one
         valid_responses = ["NEW", "NONE"]
-        print "GPG key ID to use for encryption. Enter NONE to disable encryption, NEW to create a new key pair, or one of the following IDs: "
-        print "%s " % ', '.join([k['keyid'] for k in secret_keys])
-        secret_key_id = raw_input()
+        print "Available GPG keys:"
+        print "%s " % '\n'.join(["%s (%s)" % (k['keyid'], ', '.join(k['uids'])) for k in secret_keys])
+        secret_key_id = raw_input("Enter a key ID to use for encryption, NONE to disable encryption, or NEW to create a new key pair: ")
         secret_key_id = secret_key_id.strip().upper()
 
         valid_responses += [k['keyid'] for k in secret_keys]
@@ -602,19 +624,20 @@ def configure(profile):
         key_options['name_comment'] = raw_input("Enter a comment to attach to the key: ")
         key = iceit.generate_key_pair(key_type="RSA", length=key_length, options=key_options)
 
-        print "Generated key %s" % key.fingerprint
+        print "Generated key %s" % key
 
-        secret_key_id = key.fingerprint.strip()
+        secret_key_id = key
 
     if secret_key_id != "NONE":
         settings['encryption']['key_id'] = secret_key_id
+        iceit.set_key_id(secret_key_id)
 
     iceit.write_config_file(settings)
 
     print "Config file written. Please edit it to change further options."
 
     print "Exporting encryption keys to allow them to be backed up."
-    iceit.export_keys(secret_key_id)
+    iceit.export_keys()
 
 @app.cmd(help="Backup the given path(s) using the specified backup profile.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
