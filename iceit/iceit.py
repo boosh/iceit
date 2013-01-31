@@ -226,13 +226,22 @@ class Encryptor(object):
         log.info("Writing public key with ID %s to %s" % (self.key_id, public_key_dest))
         with open(public_key_dest, 'w') as pub_key_file:
             public_key = self.gpg.export_keys(self.key_id)
-            log.debug("Public key is %s" % public_key)
             pub_key_file.write(public_key)
+
+        public_key_length = os.path.getsize(public_key_dest)
+        if public_key_length == 0:
+            raise IceItException("Error - failed to export public key")
+
         log.info("Public key written.")
 
         log.info("Writing private key to %s" % private_key_dest)
         with open(private_key_dest, 'w') as private_key_file:
             private_key_file.write(self.gpg.export_keys(self.key_id, True))
+
+        private_key_length = os.path.getsize(private_key_dest)
+        if private_key_length == 0:
+            raise IceItException("Error - failed to export private key")
+
         log.info("Private key written.")
 
     def encrypt(self, input_file, output_dir, output_extension=".enc"):
