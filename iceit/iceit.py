@@ -158,6 +158,8 @@ class Config(object):
             self.config.set('catalogue', 'name', 'catalogue.db')
             # whether to store hashes of the source files in the catalogue
             self.config.set('catalogue', 'store_source_file_hashes', 'true')
+            # maximum number of backups to preserve on S3
+            self.config.set('catalogue', 'num_catalogue_config_backups_to_keep', '14')
 
         if not self.config.has_section('encryption'):
             self.config.add_section('encryption')
@@ -440,6 +442,7 @@ class GlacierBackend:
 
         log.info("Creating vault '%s' if it doesn't exist (nothing will be done if it does)" % vault_name)
         self.vault = conn.create_vault(vault_name)
+        log.info("Vault creation request complete.")
 
     def upload(self, file_name):
         """
@@ -857,7 +860,6 @@ class IceIt(object):
 
             if self.config.getboolean('processing', 'obfuscate_file_names') is True:
                 old_file_name = file_name
-#@todo - add a loop here to make sure that the file name hasn't already been used
                 file_name = os.path.join(temp_dir, StringUtils.get_random_string())
 
                 # if the file is already in temp_dir, rename it
@@ -921,14 +923,18 @@ class IceIt(object):
         # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
         # been backed up previously and haven't since been modified, etc.
         eligible_files = self.__trim_ineligible_files(potential_files)
-        # Perform all necessary processing to backup the file, e.g. compress files that should be compressed,
-        # encrypt files as necessary, obfuscate file names and upload to storage backend.
-        self.__process_files(eligible_files)
 
-        # if all went well, save new catalogue to highly available storage backend (S3)
-        self.__backup_catalogue_and_config()
+        if len(eligible_files) > 0:
+            # Perform all necessary processing to backup the file, e.g. compress files that should be compressed,
+            # encrypt files as necessary, obfuscate file names and upload to storage backend.
+            self.__process_files(eligible_files)
 
-        #@todo - purge old config backups
+            # if all went well, save new catalogue to highly available storage backend (S3)
+            self.__backup_catalogue_and_config()
+
+            #@todo - purge old config backups
+        else:
+            log.info("No files need backing up.")
 
 
 # CLI application
