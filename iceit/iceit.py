@@ -311,7 +311,7 @@ class FileFinder(object):
         @param bool recursive - Whether to scan recursively or just return
             files in the input directory.
         """
-        self.path = path
+        self.path = unicode(path)
         self.recursive = recursive
         self.files = None
 
