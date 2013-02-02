@@ -916,16 +916,22 @@ def configure(profile):
 
     skip_key_backup = False
     while skip_key_backup == False:
-        print "Enter a passphrase to use to encrypt your encryption keys, or leave blank to skip (not recommended): "
-
-        symmetric_passphrase = getpass()
+        symmetric_passphrase = getpass.getpass("Enter a passphrase to use to encrypt your encryption keys, or leave "
+                                               "blank to skip (not recommended): ")
         symmetric_passphrase = symmetric_passphrase.strip()
         if not symmetric_passphrase:
             print "Are you sure you want to skip backing up your encryption keys?"
             confirm_skip_key_backup = raw_input("If your keys are lost there will be NO WAY to decrypt your files (y/N): ")
             confirm_skip_key_backup = confirm_skip_key_backup.strip()
-            skip_key_backup = confirm_skip_key_backup == 'y'
+            skip_key_backup = confirm_skip_key_backup.lower() == 'y'
         else:
+            symmetric_passphrase_confirmation = getpass.getpass("Enter again to confirm: ")
+            symmetric_passphrase_confirmation = symmetric_passphrase_confirmation.strip()
+
+            if symmetric_passphrase != symmetric_passphrase_confirmation:
+                print "Error - passwords don't match"
+                continue
+
             print "Encrypting encryption keys and backing up to S3..."
             raise IceItException("Implement backup of encryption keys")
 
