@@ -776,6 +776,11 @@ class IceIt(object):
         for pattern in self.config.get('processing', 'disable_compression_patterns').split(','):
             disable_compression_regexes.append(re.compile(pattern, re.IGNORECASE))
 
+        total_files_to_backup = len(eligible_files)
+        files_backed_up = 0
+
+        eligible_files = sorted(eligible_files)
+
         for file_name in eligible_files:
             source_path = file_name
             existing_catalogue_item = self.catalogue.get(source_path)
@@ -847,6 +852,9 @@ class IceIt(object):
                 'processed_hash': final_file_hash,
                 'last_backed_up': datetime.now()
             }, id=catalogue_item_id)
+
+            files_backed_up += 1
+            log.info("Backed up %d of %d files" % (files_backed_up, total_files_to_backup))
 
         # remove temporary directory
         log.info("Deleting temporary directory %s" % temp_dir)
