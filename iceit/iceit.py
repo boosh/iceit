@@ -383,6 +383,7 @@ class S3Backend:
                 self.bucket = conn.create_bucket(bucket_name, location=s3_location)
             else:
                 raise e
+        log.info("Done")
 
     def download(self, key_name):
         """
@@ -857,7 +858,7 @@ class IceIt(object):
             log.info("Backed up %d of %d files" % (files_backed_up, total_files_to_backup))
 
         # remove temporary directory
-        log.info("Deleting temporary directory %s" % temp_dir)
+        log.info("All files processed. Deleting temporary directory %s" % temp_dir)
         os.rmdir(temp_dir)
 
 
