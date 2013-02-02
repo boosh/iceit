@@ -545,6 +545,7 @@ class IceItException(Exception):
 
 class IceIt(object):
     def __init__(self, config_profile):
+        self.config_profile = config_profile
         self.config = Config(config_profile)
         try:
             self.encryptor = Encryptor(self.config.get('encryption', 'key_id'))
@@ -625,7 +626,7 @@ class IceIt(object):
             output_dir=os.path.dirname(archive_path))
 
         # upload to S3
-        self.ha_storage_backend.upload('iceit-keys-%s' % (strftime("%Y%m%d_%H%M%S")), encrypted_file_name)
+        self.ha_storage_backend.upload('iceit-keys-%s-%s' % (self.config_profile, strftime("%Y%m%d_%H%M%S")), encrypted_file_name)
 
         # Delete archives
         log.info("Deleting unencrypted temporary key archive %s" % archive_path)
@@ -656,7 +657,7 @@ class IceIt(object):
         encrypted_file_name = self.encryptor.encrypt(input_file=archive_path, output_dir=os.path.dirname(archive_path))
 
         # upload to S3
-        self.ha_storage_backend.upload('iceit-catalogue-%s' % (strftime("%Y%m%d_%H%M%S")), encrypted_file_name)
+        self.ha_storage_backend.upload('iceit-catalogue-%s-%s' % (self.config_profile, strftime("%Y%m%d_%H%M%S")), encrypted_file_name)
 
         # Delete archives
         log.info("Deleting unencrypted config backup archive %s" % archive_path)
@@ -896,6 +897,9 @@ app = aaargh.App(description="Compress, encrypt, obfuscate and archive files to 
                                         "your system using different settings.")
 def configure(profile):
     "Prompt for AWS credentials and write to config file"
+    if ' ' in profile:
+        raise IceItException("Profile names may not contain spaces")
+
     settings = {
         "aws": {},
         "encryption": {}
