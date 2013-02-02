@@ -2,18 +2,20 @@ IceIt - Put your files on ice
 =============================
 IceIt lets you back up your files to Amazon Glacier. It can:
 
+  * Optionally compress certain file types prior to backing up
   * Encrypt your files before backing up
   * Obfuscate file names so nobody will be able to know what you have uploaded
   * Support multiple backup profiles, each containing different settings
   * Compare files that have changed in your backup directories and only upload changed/new files
+  * Encrypt & backup all config files to S3 for safety
 
 IceIt also maintains an sqlite database containing information about the files that have been backed up. This
 is especially important when file names have been obfuscated because it contains information about the original
 file name, the obfuscated file name and various hashes that confirm a file's integrity upon decryption.
 
-Because this catalogue is critical, it is automatically backed up to S3. Without it you will technically be able
-to recover your files, but if you have any number backed up you will have to manually examine them and rename them
-to their original names.
+Because this catalogue is critical, it is automatically encrypted and backed up to S3. Without it while you will
+technically be able to recover your files, you will have to manually examine them and rename them to their original
+names.
 
 Requirements
 ------------

@@ -7,7 +7,9 @@
 import aaargh
 import boto.glacier
 import boto.s3
+from boto.s3.key import Key
 from boto.s3.connection import Location
+from boto.exception import S3ResponseError
 from bz2 import BZ2File
 import ConfigParser
 from copy import copy
@@ -22,7 +24,7 @@ import re
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
 import string
 import sys
-from tempfile import mkstemp, mkdtemp
+from tempfile import mkstemp, mkdtemp, TemporaryFile
 
 log = logging.getLogger(__name__)
 
@@ -339,6 +341,228 @@ class StringUtils(object):
             string.ascii_letters + string.digits) for x in range(length))
 
 
+class S3Backend:
+    """
+    Backend to handle S3 upload/download (modified from bakthat)
+    """
+    def __init__(self, access_key, secret_key, bucket_name, s3_location):
+        conn = boto.connect_s3(access_key, secret_key)
+
+        try:
+            self.bucket = conn.get_bucket(bucket_name)
+        except S3ResponseError, e:
+            if e.code == "NoSuchBucket":
+                self.bucket = conn.create_bucket(bucket_name, location=s3_location)
+            else:
+                raise e
+
+    def download(self, key_name):
+        """
+        Download a file
+
+        @param string key_name - Key of the file to download
+        """
+        k = Key(self.bucket, key_name)
+
+        encrypted_out = TemporaryFile()
+        k.get_contents_to_file(encrypted_out)
+        encrypted_out.seek(0)
+
+        return encrypted_out
+
+    def __progress_callback(self, complete, total):
+        "Callback to display progress"
+        percent = int(complete * 100.0 / total)
+        log.info("Upload completion: {}%".format(percent))
+
+    def upload(self, key_name, file_name, cb=True):
+        """
+        Upload a file to the bucket
+
+        @param string key_name - Key of the file to upload
+        """
+        k = Key(self.bucket, key_name)
+        k.encrypted = True
+        upload_kwargs = {}
+        if cb:
+            upload_kwargs = dict(cb=self.__progress_callback, num_cb=10)
+        k.set_contents_from_filename(file_name, **upload_kwargs)
+        k.set_acl("private")
+
+    def ls(self):
+        "List all keys in the bucket"
+        return [key.name for key in self.bucket.get_all_keys()]
+
+    def delete(self, key_name):
+        """
+        Delete an object from the bucket
+
+        @param string key_name - Key of the object to delete
+        """
+        k = Key(self.bucket, key_name)
+        return self.bucket.delete_key(k)
+
+
+class GlacierBackend:
+    """
+    Backend to handle Glacier upload/download (modified from bakthat)
+    """
+    def __init__(self, access_key, secret_key, vault_name, region_name):
+        log.info("Connecting to Amazon Glacier...")
+        conn = boto.connect_glacier(aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key, region_name=region_name)
+        log.info("Connection established.")
+
+        log.info("Creating vault '%s' if it doesn't exist (nothing will be done if it does)" % vault_name)
+        self.vault = conn.create_vault(vault_name)
+
+    def upload(self, file_name):
+        """
+        Backup the file and return the archive ID.
+
+        @param string file_name - Full path to the file to backup
+        @return string - AWS archive ID for the file
+        """
+        log.info("Uploading file '%s' to Glacier" % file_name)
+        return self.vault.concurrent_create_archive_from_file(file_name, '')
+
+#    def backup_inventory(self):
+#        """
+#        Backup the local inventory from shelve as a json string to S3
+#        """
+#        with glacier_shelve() as d:
+#            if not d.has_key("archives"):
+#                d["archives"] = dict()
+#
+#            archives = d["archives"]
+#
+#        s3_bucket = S3Backend(self.conf).bucket
+#        k = Key(s3_bucket)
+#        k.key = self.backup_key
+#
+#        k.set_contents_from_string(json.dumps(archives))
+#
+#        k.set_acl("private")
+#
+#
+#    def restore_inventory(self):
+#        """
+#        Restore inventory from S3 to local shelve
+#        """
+#        s3_bucket = S3Backend(self.conf).bucket
+#        k = Key(s3_bucket)
+#        k.key = self.backup_key
+#
+#        loaded_archives = json.loads(k.get_contents_as_string())
+#
+#        with glacier_shelve() as d:
+#            if not d.has_key("archives"):
+#                d["archives"] = dict()
+#
+#            archives = loaded_archives
+#            d["archives"] = archives
+
+
+#    def get_archive_id(self, filename):
+#        """
+#        Get the archive_id corresponding to the filename
+#        """
+#        with glacier_shelve() as d:
+#            if not d.has_key("archives"):
+#                d["archives"] = dict()
+#
+#            archives = d["archives"]
+#
+#            if filename in archives:
+#                return archives[filename]
+#
+#        return None
+#
+#    def download(self, keyname):
+#        """
+#        Initiate a Job, check its status, and download the archive if it's completed.
+#        """
+#        archive_id = self.get_archive_id(keyname)
+#        if not archive_id:
+#            return
+#
+#        with glacier_shelve() as d:
+#            if not d.has_key("jobs"):
+#                d["jobs"] = dict()
+#
+#            jobs = d["jobs"]
+#            job = None
+#
+#            if keyname in jobs:
+#                # The job is already in shelve
+#                job_id = jobs[keyname]
+#                try:
+#                    job = self.vault.get_job(job_id)
+#                except UnexpectedHTTPResponseError: # Return a 404 if the job is no more available
+#                    del job[keyname]
+#
+#            if not job:
+#                # Job initialization
+#                job = self.vault.retrieve_archive(archive_id)
+#                jobs[keyname] = job.id
+#                job_id = job.id
+#
+#            # Commiting changes in shelve
+#            d["jobs"] = jobs
+#
+#        log.info("Job {action}: {status_code} ({creation_date}/{completion_date})".format(**job.__dict__))
+#
+#        if job.completed:
+#            log.info("Downloading...")
+#            encrypted_out = tempfile.TemporaryFile()
+#            encrypted_out.write(job.get_output().read())
+#            encrypted_out.seek(0)
+#            return encrypted_out
+#        else:
+#            log.info("Not completed yet")
+#            return None
+#
+#    def retrieve_inventory(self, jobid):
+#        """
+#        Initiate a job to retrieve Galcier inventory or output inventory
+#        """
+#        if jobid is None:
+#            return self.vault.retrieve_inventory(sns_topic=None, description="Bakthat inventory job")
+#        else:
+#            return self.vault.get_job(jobid)
+#
+#    def retrieve_archive(self, archive_id, jobid):
+#        """
+#        Initiate a job to retrieve Galcier archive or download archive
+#        """
+#        if jobid is None:
+#            return self.vault.retrieve_archive(archive_id, sns_topic=None, description='Retrieval job')
+#        else:
+#            return self.vault.get_job(jobid)
+#
+#
+#    def ls(self):
+#        with glacier_shelve() as d:
+#            if not d.has_key("archives"):
+#                d["archives"] = dict()
+#
+#            return d["archives"].keys()
+#
+#    def delete(self, keyname):
+#        archive_id = self.get_archive_id(keyname)
+#        if archive_id:
+#            self.vault.delete_archive(archive_id)
+#            with glacier_shelve() as d:
+#                archives = d["archives"]
+#
+#                if keyname in archives:
+#                    del archives[keyname]
+#
+#                d["archives"] = archives
+#
+#            self.backup_inventory()
+
+
 class IceItException(Exception):
     "Base exception class"
     pass
@@ -358,6 +582,23 @@ class IceIt(object):
         "Open the catalogue"
         if not self.catalogue:
             self.catalogue = Catalogue(self.config.get_catalogue_path())
+
+    def __initialise_backends(self):
+        "Connect to storage backends"
+        access_key = self.config.get("aws", "access_key")
+        secret_key = self.config.get("aws", "secret_key")
+        vault_name = self.config.get("aws", "glacier_vault")
+        region_name = self.config.get("aws", "glacier_region")
+
+        # where files are stored long-term
+        self.long_term_storage_backend = GlacierBackend(access_key, secret_key, vault_name, region_name)
+
+        bucket_name = self.config.get("aws", "s3_bucket")
+        s3_location = self.config.get("aws", "s3_location")
+
+        # A backend for accessing files immediately. The catalogue will be backed up here.
+        self.ha_storage_backend = S3Backend(access_key, secret_key, bucket_name, s3_location)
+
 
     def write_config_file(self, settings):
         return self.config.write_config_file(settings)
@@ -524,6 +765,7 @@ class IceIt(object):
 
             if self.config.getboolean('processing', 'obfuscate_file_names') is True:
                 old_file_name = file_name
+#@todo - add a loop here to make sure that the file name hasn't already been used
                 file_name = os.path.join(temp_dir, StringUtils.get_random_string())
 
                 # if the file is already in temp_dir, rename it
@@ -539,8 +781,7 @@ class IceIt(object):
             log.info("Processed file SHA256 hash is %s" % final_file_hash)
 
             # upload to storage backend
-# @todo - add the AWS archive ID
-            aws_archive_id = None
+            aws_archive_id = self.long_term_storage_backend.upload(file_name)
 
             # delete the temporary file or symlink
             if file_name.startswith(temp_dir):
@@ -571,6 +812,8 @@ class IceIt(object):
         """
         Backup the given paths under the given config profile, optionally recursively.
         """
+        self.__initialise_backends()
+
         potential_files = set()
         # find all files in the given paths and add to a set
         for path in  paths:
@@ -590,6 +833,8 @@ class IceIt(object):
         self.__process_files(eligible_files)
 
         # if all went well, save new catalogue to highly available storage backend (S3)
+# @todo encrypt config file & catalogue and back up to S3 (we should keep a certain number of previous versions - allow this
+# to be configured)
 
 
 # CLI application
@@ -613,12 +858,12 @@ def configure(profile):
     s3_locations = [l for l in dir(Location) if not '_' in l]
     print "S3 settings: The list of your files along with any encryption keys will be stored in S3."
     settings['aws']["s3_location"] = raw_input("S3 location (possible values are %s): " % ', '.join(s3_locations))
-    settings['aws']["s3_bucket"] = raw_input("S3 Bucket Name: ")
+    settings['aws']["s3_bucket"] = raw_input("S3 Bucket Name (will be created if it doesn't exist): ")
 
     glacier_regions = boto.glacier.regions()
     print "Your files will be backed up to Glacier."
     settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
-    settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name: ")
+    settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name (will be created if it doesn't exist): ")
 
     iceit = IceIt(profile)
 
@@ -664,6 +909,25 @@ def configure(profile):
 
     print "Exporting encryption keys to allow them to be backed up."
     iceit.export_keys()
+
+    print "For safety I'm going to back your encryption keys up onto S3."
+    print "They will be added to a tar.bz2 archive and encrypted with GPG using symmetric encryption (i.e. a passphrase)."
+    print "The security of your files depends on the strength of this passphrase. Make it long and difficult to guess!"
+
+    skip_key_backup = False
+    while skip_key_backup == False:
+        print "Enter a passphrase to use to encrypt your encryption keys, or leave blank to skip (not recommended): "
+
+        symmetric_passphrase = getpass()
+        symmetric_passphrase = symmetric_passphrase.strip()
+        if not symmetric_passphrase:
+            print "Are you sure you want to skip backing up your encryption keys?"
+            confirm_skip_key_backup = raw_input("If your keys are lost there will be NO WAY to decrypt your files (y/N): ")
+            confirm_skip_key_backup = confirm_skip_key_backup.strip()
+            skip_key_backup = confirm_skip_key_backup == 'y'
+        else:
+            print "Encrypting encryption keys and backing up to S3..."
+            raise IceItException("Implement backup of encryption keys")
 
 @app.cmd(help="Backup the given path(s) using the specified backup profile.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
