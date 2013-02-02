@@ -53,6 +53,10 @@ will then create a new subdirectory under ~/.iceit with the profile name, and wr
 export your GPG keys into that directory so they can be backed up. Finally, for safety, you will be prompted for
 a passphrase to use to encrypt your keys before uploading them to Amazon S3.
 
+Glacier can deliver job notifications to Amazon SNS topics. If you wish to receive notifications to an SNS topic,
+create a new topic and a subscription (for example to your email address) using the Amazon console. Then enter the
+SNS topic identifier (called the ARN by Amazon) when prompted during configuration.
+
 Note: When selecting a GPG key ID, choose a key without a passphrase. IceIt encrypts and signs files before backing
 them up, and signing requires the private key. If it is protected by a passphrase, it will not be possible for
 IceIt to prompt you for it, or to run IceIt by cron.

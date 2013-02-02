@@ -150,6 +150,7 @@ class Config(object):
         self.config.set("aws", "s3_bucket", settings['aws']['s3_bucket'])
         self.config.set("aws", "glacier_region", settings['aws']['glacier_region'])
         self.config.set("aws", "glacier_vault", settings['aws']['glacier_vault'])
+        self.config.set("aws", "sns_topic_arn", settings['aws']['sns_topic_arn'])
 
         # default config values
         if not self.config.has_section('catalogue'):
@@ -500,14 +501,16 @@ class GlacierBackend:
 #            log.info("Not completed yet")
 #            return None
 #
-    def retrieve_inventory(self, job_id):
+    def retrieve_inventory(self, job_id, sns_topic=None):
         """
         Initiate a job to retrieve Glacier inventory or return the job if it has already been initialised.
 
         @param string job_id - The AWS job ID of the retrieve_inventory job
+        @param string sns_topic - The Amazon SNS topic ARN where Amazon Glacier sends notification when the job is
+            completed and the output is ready to download.
         """
         if job_id is None:
-            return self.vault.retrieve_inventory(sns_topic=None, description="IceIt inventory job")
+            return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory job")
         else:
             return self.vault.get_job(job_id)
 #
@@ -911,6 +914,9 @@ def configure(profile):
     settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
     settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name (will be created if it doesn't exist): ")
 
+    settings['aws']['sns_topic_arn'] = raw_input("SNS topic ARN to which you want to job notifications sending "
+                                                 "(leave blank to disable): ")
+
     iceit = IceIt(profile)
 
     secret_keys = iceit.list_secret_keys()
@@ -958,6 +964,8 @@ def configure(profile):
         iceit.export_keys()
 
         backup_keys(profile)
+
+    print "Configuration complete"
 
 
 @app.cmd(help="Backup your encryption keys to S3.")
