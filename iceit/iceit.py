@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/usr/bin/env python
 
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 #
