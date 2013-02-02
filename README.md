@@ -74,3 +74,14 @@ If a file has changed since running a previous backup, the change will be detect
 be uploaded to Glacier, but the old version WILL NOT be deleted from Glacier or the catalogue. This means that if
 you use this script to backup frequently changing files, you will end up with multiple versions of the same file
 backed up.
+
+Importing GPG keys
+------------------
+See the GPG documentation for more information about importing keys. One important note is that the key must be
+marked as "trusted" when you import a key for you to be able to use it for encryption and signing. Trust a key
+with:
+
+`gpg --edit-key KEY_ID`
+`trust`
+
+Enter a value to show how much you trust the key - probably 5 if you generated it yourself.
