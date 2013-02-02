@@ -63,3 +63,10 @@ Once configured, IceIt can be made to perform backups by invoking it as follows:
 
 `iceit backup PROFILE_NAME FILES...` where PROFILE_NAME is the name of a backup profile, and FILES... is lists
 of files or directories to backup.
+
+A note about changed files
+--------------------------
+If a file has changed since running a previous backup, the change will be detected. In that case, the new filel will
+be uploaded to Glacier, but the old version WILL NOT be deleted from Glacier or the catalogue. This means that if
+you use this script to backup frequently changing files, you will end up with multiple versions of the same file
+backed up.

@@ -31,7 +31,7 @@ from time import strftime
 log = logging.getLogger(__name__)
 
 if not log.handlers:
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
 class Catalogue(object):
     """
@@ -371,8 +371,10 @@ class S3Backend:
     Backend to handle S3 upload/download (modified from bakthat)
     """
     def __init__(self, access_key, secret_key, bucket_name, s3_location):
+        log.info("Connecting to S3...")
         conn = boto.connect_s3(access_key, secret_key)
 
+        log.info("Done. Retrieving or creating bucket %s" % bucket_name)
         try:
             self.bucket = conn.get_bucket(bucket_name)
         except S3ResponseError, e:
@@ -454,58 +456,6 @@ class GlacierBackend:
         log.info("Uploading file '%s' to Glacier" % file_name)
         return self.vault.concurrent_create_archive_from_file(file_name, '')
 
-#    def backup_inventory(self):
-#        """
-#        Backup the local inventory from shelve as a json string to S3
-#        """
-#        with glacier_shelve() as d:
-#            if not d.has_key("archives"):
-#                d["archives"] = dict()
-#
-#            archives = d["archives"]
-#
-#        s3_bucket = S3Backend(self.conf).bucket
-#        k = Key(s3_bucket)
-#        k.key = self.backup_key
-#
-#        k.set_contents_from_string(json.dumps(archives))
-#
-#        k.set_acl("private")
-#
-#
-#    def restore_inventory(self):
-#        """
-#        Restore inventory from S3 to local shelve
-#        """
-#        s3_bucket = S3Backend(self.conf).bucket
-#        k = Key(s3_bucket)
-#        k.key = self.backup_key
-#
-#        loaded_archives = json.loads(k.get_contents_as_string())
-#
-#        with glacier_shelve() as d:
-#            if not d.has_key("archives"):
-#                d["archives"] = dict()
-#
-#            archives = loaded_archives
-#            d["archives"] = archives
-
-
-#    def get_archive_id(self, filename):
-#        """
-#        Get the archive_id corresponding to the filename
-#        """
-#        with glacier_shelve() as d:
-#            if not d.has_key("archives"):
-#                d["archives"] = dict()
-#
-#            archives = d["archives"]
-#
-#            if filename in archives:
-#                return archives[filename]
-#
-#        return None
-#
 #    def download(self, keyname):
 #        """
 #        Initiate a Job, check its status, and download the archive if it's completed.
@@ -550,31 +500,25 @@ class GlacierBackend:
 #            log.info("Not completed yet")
 #            return None
 #
-#    def retrieve_inventory(self, jobid):
-#        """
-#        Initiate a job to retrieve Galcier inventory or output inventory
-#        """
-#        if jobid is None:
-#            return self.vault.retrieve_inventory(sns_topic=None, description="Bakthat inventory job")
-#        else:
-#            return self.vault.get_job(jobid)
+    def retrieve_inventory(self, job_id):
+        """
+        Initiate a job to retrieve Glacier inventory or return the job if it has already been initialised.
+
+        @param string job_id - The AWS job ID of the retrieve_inventory job
+        """
+        if job_id is None:
+            return self.vault.retrieve_inventory(sns_topic=None, description="IceIt inventory job")
+        else:
+            return self.vault.get_job(job_id)
 #
 #    def retrieve_archive(self, archive_id, jobid):
 #        """
-#        Initiate a job to retrieve Galcier archive or download archive
+#        Initiate a job to retrieve Glacier archive or download archive
 #        """
 #        if jobid is None:
 #            return self.vault.retrieve_archive(archive_id, sns_topic=None, description='Retrieval job')
 #        else:
 #            return self.vault.get_job(jobid)
-#
-#
-#    def ls(self):
-#        with glacier_shelve() as d:
-#            if not d.has_key("archives"):
-#                d["archives"] = dict()
-#
-#            return d["archives"].keys()
 #
 #    def delete(self, keyname):
 #        archive_id = self.get_archive_id(keyname)
@@ -752,9 +696,8 @@ class IceIt(object):
         eligible_files = copy(potential_files)
 
         for file_path in potential_files:
-            catalogue_item = self.catalogue.get(file_path)
-            if catalogue_item:
-                catalogue_item = catalogue_item[0]
+            catalogue_items = self.catalogue.get(file_path)
+            for catalogue_item in catalogue_items:
                 # if the mtime hasn't changed, remove from eligible_files
                 log.info("File %s is already in the catalogue. Checking for changes..." % file_path)
                 current_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
@@ -856,6 +799,7 @@ class IceIt(object):
 
             # encrypt file
             if self.encryption_enabled():
+                unencrypted_file_name = file_name
                 file_name = self.encryptor.encrypt(file_name, temp_dir)
 
             if self.config.getboolean('processing', 'obfuscate_file_names') is True:
@@ -880,7 +824,10 @@ class IceIt(object):
             # delete the temporary file or symlink
             if file_name.startswith(temp_dir):
                 log.info("Deleting temporary file/symlink %s" % file_name)
-                # @todo - implement
+                os.unlink(file_name)
+                if unencrypted_file_name.startswith(temp_dir):
+                    log.info("Deleting unencrypted file/symlink %s" % unencrypted_file_name)
+                    os.unlink(unencrypted_file_name)
 
             try:
                 catalogue_item_id = existing_catalogue_item.id
@@ -899,8 +846,7 @@ class IceIt(object):
 
         # remove temporary directory
         log.info("Deleting temporary directory %s" % temp_dir)
-# @todo - enable
-#        os.rmdir(temp_dir)
+        os.rmdir(temp_dir)
 
 
     def backup(self, paths, recursive):
