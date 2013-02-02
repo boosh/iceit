@@ -20,7 +20,7 @@ names.
 Requirements
 ------------
 
-  * python
+  * python >= 2.7.3
   * gpg
   * Amazon Web Services account for Glacier and S3
 
@@ -50,7 +50,8 @@ To create a new profile, run:
 
 You will be prompted for various settings, such as your AWS account credentials and GPG encryption key ID. IceIt
 will then create a new subdirectory under ~/.iceit with the profile name, and write a config file. It will also
-export your GPG keys into that directory so they can be backed up.
+export your GPG keys into that directory so they can be backed up. Finally, for safety, you will be prompted for
+a passphrase to use to encrypt your keys before uploading them to Amazon S3.
 
 Note: When selecting a GPG key ID, choose a key without a passphrase. IceIt encrypts and signs files before backing
 them up, and signing requires the private key. If it is protected by a passphrase, it will not be possible for

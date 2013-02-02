@@ -684,12 +684,11 @@ class IceIt(object):
         log.info("Deleting encrypted temporary key archive %s" % encrypted_file_name)
         os.unlink(encrypted_file_name)
 
-
     def is_configured(self):
         "Return a boolean indicating whether the current config profile is valid and complete"
         return self.config.is_valid()
 
-    def __encryption_enabled(self):
+    def encryption_enabled(self):
         """
         Returns a boolean indicating whether to encrypt files
 
@@ -822,7 +821,7 @@ class IceIt(object):
                 file_name = self.__compress_file(file_name, temp_dir)
 
             # encrypt file
-            if self.__encryption_enabled():
+            if self.encryption_enabled():
                 file_name = self.encryptor.encrypt(file_name, temp_dir)
 
             if self.config.getboolean('processing', 'obfuscate_file_names') is True:
@@ -970,10 +969,11 @@ def configure(profile):
 
     print "Config file written. Please edit it to change further options."
 
-    print "Exporting encryption keys to allow them to be backed up."
-    iceit.export_keys()
+    if iceit.encryption_enabled():
+        print "Exporting encryption keys to allow them to be backed up."
+        iceit.export_keys()
 
-    backup_keys(profile)
+        backup_keys(profile)
 
 
 @app.cmd(help="Backup your encryption keys to S3.")
@@ -982,6 +982,9 @@ def configure(profile):
                                        "your system using different settings.")
 def backup_keys(profile):
     iceit = IceIt(profile)
+
+    if not iceit.encryption_enabled():
+        print "No encryption keys are configured. Aborting."
 
     print "For safety I'm going to back your encryption keys up onto S3."
     print "They will be added to a tar.bz2 archive and encrypted with GPG using symmetric encryption (i.e. a passphrase)."
