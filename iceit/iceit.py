@@ -684,6 +684,37 @@ class IceIt(object):
         log.info("Deleting encrypted temporary key archive %s" % encrypted_file_name)
         os.unlink(encrypted_file_name)
 
+    def __backup_catalogue_and_config(self):
+        """
+        Backup catalogue and config file to S3. Catalogue and config will be combined into a tar.bz2 archive then
+        encrypted with GPG before being uploaded to S3.
+        """
+        self.__initialise_backends()
+        (file_handle, archive_path) = mkstemp()
+        tar_archive = tarfile.open(name=archive_path, mode='w:bz2')
+        catalogue_path = self.config.get_catalogue_path()
+        log.info("Adding catalogue '%s' to config backup archive '%s'" % (catalogue_path, archive_path))
+        tar_archive.add(catalogue_path)
+
+        config_path = self.config.get_config_file_path()
+        log.info("Adding config file '%s' to config backup archive '%s'" % (config_path, archive_path))
+        tar_archive.add(config_path)
+        log.info("Closing config backup archive")
+        tar_archive.close()
+
+        # encrypt with GPG
+        encrypted_file_name = self.encryptor.encrypt(input_file=archive_path, output_dir=os.path.dirname(archive_path))
+
+        # upload to S3
+        self.ha_storage_backend.upload('iceit-catalogue-%s' % (strftime("%Y%m%d_%H%M%S")), encrypted_file_name)
+
+        # Delete archives
+        log.info("Deleting unencrypted config backup archive %s" % archive_path)
+        os.unlink(archive_path)
+
+        log.info("Deleting encrypted temporary config backup archive %s" % encrypted_file_name)
+        os.unlink(encrypted_file_name)
+
     def is_configured(self):
         "Return a boolean indicating whether the current config profile is valid and complete"
         return self.config.is_valid()
@@ -895,8 +926,9 @@ class IceIt(object):
         self.__process_files(eligible_files)
 
         # if all went well, save new catalogue to highly available storage backend (S3)
-# @todo encrypt config file & catalogue and back up to S3 (we should keep a certain number of previous versions - allow this
-# to be configured)
+        self.__backup_catalogue_and_config()
+
+        #@todo - purge old config backups
 
 
 # CLI application
