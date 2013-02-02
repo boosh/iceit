@@ -24,7 +24,9 @@ import re
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
 import string
 import sys
+import tarfile
 from tempfile import mkstemp, mkdtemp, TemporaryFile
+from time import strftime
 
 log = logging.getLogger(__name__)
 
@@ -259,7 +261,6 @@ class Encryptor(object):
         @param string output_extension - An extension to append to the file
         """
         encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
-        log.info("Encrypting %s to %s" % (input_file, encrypted_file_name))
 
         if not self.key_id:
             raise IceItException("Can't encrypt files. Set the key ID first.")
@@ -267,6 +268,7 @@ class Encryptor(object):
         if not os.path.exists(input_file):
             raise IceItException("Can't encrypt non-existent file '%s'" % input_file)
 
+        log.info("Encrypting %s to %s" % (input_file, encrypted_file_name))
         with open(input_file, 'r') as file:
             self.gpg.encrypt_file(file, self.key_id, sign=self.key_id, armor=False, output=encrypted_file_name)
 
@@ -274,6 +276,27 @@ class Encryptor(object):
             raise IceItException("Failed to encrypt file. Perhaps you specified a key that needs a passphrase?")
 
         log.info("Encryption complete.")
+        return encrypted_file_name
+
+    def encrypt_symmetric(self, passphrase, input_file, output_dir, output_extension='.gpg'):
+        """
+        Encrypt and sign a file using symmetric encryption. File will be signed with the current key.
+
+        @param string passphrase - The passphrase to use
+        @param string input_file - The file to encrypt.
+        @param string output_dir - The file to write the encrypted file to.
+        @param string output_extension - An extension to append to the file
+        """
+        encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
+
+        if not os.path.exists(input_file):
+            raise IceItException("Can't encrypt non-existent file '%s'" % input_file)
+
+        log.info("Encrypting %s to %s using symmetric encryption" % (input_file, encrypted_file_name))
+        with open(input_file) as file:
+            self.gpg.encrypt_file(file, recipients=None, sign=self.key_id, armor=False, output=encrypted_file_name,
+                symmetric=True, passphrase=passphrase)
+
         return encrypted_file_name
 
 
@@ -381,12 +404,14 @@ class S3Backend:
 
         @param string key_name - Key of the file to upload
         """
+        log.debug("Uploading file %s to S3 under key %s" % (file_name, key_name))
         k = Key(self.bucket, key_name)
         k.encrypted = True
         upload_kwargs = {}
         if cb:
             upload_kwargs = dict(cb=self.__progress_callback, num_cb=10)
         k.set_contents_from_filename(file_name, **upload_kwargs)
+        log.debug("Upload complete. Marking object private")
         k.set_acl("private")
 
     def ls(self):
@@ -585,6 +610,7 @@ class IceIt(object):
 
     def __initialise_backends(self):
         "Connect to storage backends"
+        log.debug("Initialising backends...")
         access_key = self.config.get("aws", "access_key")
         secret_key = self.config.get("aws", "secret_key")
         vault_name = self.config.get("aws", "glacier_vault")
@@ -592,13 +618,14 @@ class IceIt(object):
 
         # where files are stored long-term
         self.long_term_storage_backend = GlacierBackend(access_key, secret_key, vault_name, region_name)
+        log.debug("Connected to Glacier")
 
         bucket_name = self.config.get("aws", "s3_bucket")
         s3_location = self.config.get("aws", "s3_location")
 
         # A backend for accessing files immediately. The catalogue will be backed up here.
         self.ha_storage_backend = S3Backend(access_key, secret_key, bucket_name, s3_location)
-
+        log.debug("Connected to S3")
 
     def write_config_file(self, settings):
         return self.config.write_config_file(settings)
@@ -622,6 +649,41 @@ class IceIt(object):
     def export_keys(self):
         "Export the key pair"
         return self.encryptor.export_keys(self.config.get_public_key_path(), self.config.get_private_key_path())
+
+    def backup_encryption_keys(self, symmetric_passphrase):
+        """
+        Backup encryption keys to S3. Keys will be combined into a tar.bz2 archive then encrypted with
+        GPG using symmetric encryption before being uploaded to S3.
+
+        @param string symmetric_passphrase - The passphrase to use to encrypt the archive.
+        """
+        self.__initialise_backends()
+        (file_handle, archive_path) = mkstemp()
+        tar_archive = tarfile.open(name=archive_path, mode='w:bz2')
+        public_key_path = self.config.get_public_key_path()
+        log.info("Adding public key '%s' to key archive '%s'" % (public_key_path, archive_path))
+        tar_archive.add(public_key_path)
+
+        private_key_path = self.config.get_private_key_path()
+        log.info("Adding private key '%s' to key archive '%s'" % (private_key_path, archive_path))
+        tar_archive.add(private_key_path)
+        log.info("Closing key archive")
+        tar_archive.close()
+
+        # encrypt with GPG
+        encrypted_file_name = self.encryptor.encrypt_symmetric(passphrase=symmetric_passphrase, input_file=archive_path,
+            output_dir=os.path.dirname(archive_path))
+
+        # upload to S3
+        self.ha_storage_backend.upload('iceit-keys-%s' % (strftime("%Y%m%d_%H%M%S")), encrypted_file_name)
+
+        # Delete archives
+        log.info("Deleting unencrypted temporary key archive %s" % archive_path)
+        os.unlink(archive_path)
+
+        log.info("Deleting encrypted temporary key archive %s" % encrypted_file_name)
+        os.unlink(encrypted_file_name)
+
 
     def is_configured(self):
         "Return a boolean indicating whether the current config profile is valid and complete"
@@ -805,6 +867,7 @@ class IceIt(object):
 
         # remove temporary directory
         log.info("Deleting temporary directory %s" % temp_dir)
+# @todo - enable
 #        os.rmdir(temp_dir)
 
 
@@ -910,6 +973,16 @@ def configure(profile):
     print "Exporting encryption keys to allow them to be backed up."
     iceit.export_keys()
 
+    backup_keys(profile)
+
+
+@app.cmd(help="Backup your encryption keys to S3.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+def backup_keys(profile):
+    iceit = IceIt(profile)
+
     print "For safety I'm going to back your encryption keys up onto S3."
     print "They will be added to a tar.bz2 archive and encrypted with GPG using symmetric encryption (i.e. a passphrase)."
     print "The security of your files depends on the strength of this passphrase. Make it long and difficult to guess!"
@@ -932,8 +1005,9 @@ def configure(profile):
                 print "Error - passwords don't match"
                 continue
 
-            print "Encrypting encryption keys and backing up to S3..."
-            raise IceItException("Implement backup of encryption keys")
+            iceit.backup_encryption_keys(symmetric_passphrase)
+            break
+
 
 @app.cmd(help="Backup the given path(s) using the specified backup profile.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
