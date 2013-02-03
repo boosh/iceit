@@ -263,7 +263,7 @@ class Encryptor(object):
         @param string output_dir - The file to write the encrypted file to.
         @param string output_extension - An extension to append to the file
         """
-        encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
+        encrypted_file_name = unicode(os.path.join(output_dir, os.path.basename(input_file) + output_extension))
 
         if not self.key_id:
             raise IceItException("Can't encrypt files. Set the key ID first.")
@@ -290,7 +290,7 @@ class Encryptor(object):
         @param string output_dir - The file to write the encrypted file to.
         @param string output_extension - An extension to append to the file
         """
-        encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
+        encrypted_file_name = unicode(os.path.join(output_dir, os.path.basename(input_file) + output_extension))
 
         if not os.path.exists(input_file):
             raise IceItException("Can't encrypt non-existent file '%s'" % input_file)
