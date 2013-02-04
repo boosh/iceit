@@ -3,6 +3,16 @@
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 #
 # Inspired by duply/duplicity and bakthat.
+#
+# @todo - Allow files larger than a certain size to be split into pieces
+# @todo - Implement a restore command. It should allow the version to be specified by backup date, e.g.
+#         iceit.py restore default /full/or/partial/file/name@yyyy-mm-dd_HH:MM:SS
+#         This will restore a specific version. By default the most recent will be restored.
+#         Specifying file names in this way, we'll display all matching files in a numbered list, and the user
+#         can select a number to show which file they want to restore.
+#         Also allow an output path to be specified.
+# @todo - An aggressive dedupe mode that compares candidate files by hashes in the db instead of looking at
+#         file name
 
 import aaargh
 import boto.glacier
