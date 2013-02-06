@@ -792,9 +792,13 @@ class IceIt(object):
         total_files_to_backup = len(eligible_files)
         files_backed_up = 0
 
-        eligible_files = sorted(eligible_files)
+        # paranoia - shuffle the order of the eligible_files so that no-one could know which encrypted file
+        # corresponds to which uploaded file even if they had a directory listing of files that were uploaded
+        # and could inspect timestamps in Glacier
+        eligible_files_list = list(eligible_files)
+        random.shuffle(eligible_files_list)
 
-        for file_name in eligible_files:
+        for file_name in eligible_files_list:
             source_path = file_name
             existing_catalogue_item = self.catalogue.get(source_path)
 
