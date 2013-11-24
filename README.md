@@ -24,6 +24,9 @@ Requirements
   * gpg
   * Amazon Web Services account for Glacier and S3
 
+You also need enough free disk space in /tmp to buffer the files you're uploading. When files are encrypted, they're
+copied to a subdirectory of /tmp then encrypted.
+
 Installation under virtualenv
 -----------------------------
 Assuming you have virtualenv installed, do the following:

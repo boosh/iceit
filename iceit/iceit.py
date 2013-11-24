@@ -845,6 +845,9 @@ class IceIt(object):
             log.info("Processed file SHA256 hash is %s" % final_file_hash)
 
             # upload to storage backend
+# @todo split large files into smaller chunks and process them all together. The should be separately encrypted and
+# @todo hashed so we know when downloading that archives are integral
+# @todo - confirm that uploads where errors were caught did actually upload correctly
             aws_archive_id = self.long_term_storage_backend.upload(file_name)
 
             # delete the temporary file or symlink
