@@ -31,7 +31,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_init_invalid(self):
         """
-        Test how it handles an init failure not due to a bucket not existing
+        Test how the S3 backend handles an init failure not due to a bucket not existing
         """
         access_key = 'fake_key'
         secret_key = 'fake_secret'
@@ -50,7 +50,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_init_auto_create_bucket(self):
         """
-        Test that it automatically creates a bucket that doesn't exist
+        Test that we automatically create an S3 bucket if one doesn't exist
         """
         access_key = 'fake_key'
         secret_key = 'fake_secret'
@@ -75,7 +75,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_download(self):
         """
-        Test downloading works
+        Test downloading from S3 works
         """
         fake_contents = "This is the file contents"
         fake_key_name = 'fake_key_name'
@@ -98,7 +98,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_upload(self):
         """
-        Test that uploading works
+        Test that uploading to S3 works
         """
         fake_key_name = 'fake_key_name'
         fake_file_name = 'fake_file_name'
@@ -115,7 +115,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_ls(self):
         """
-        Test ls returns data
+        Test ls returns data from S3
         """
         fake_key = namedtuple('Key', ['name'])
         num_items = 10
@@ -133,7 +133,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_delete(self):
         """
-        Test deletion works
+        Test S3 deletion works
         """
         fake_key_name = 'fake_key_name'
 
@@ -170,3 +170,39 @@ class TestGlacierBackend(unittest.TestCase):
             mock_conn.create_vault.assert_called_once_with(vault_name)
 
         return backend
+
+    def test_upload(self):
+        """
+        Test we can upload to glacier
+        """
+        fake_file_name = 'fake_file_name'
+
+        backend = self.test_init_valid()
+        backend.upload(fake_file_name)
+
+        backend.vault.concurrent_create_archive_from_file.assert_called_once_with(fake_file_name, '')
+
+    def test_retrieve_inventory_no_job_id(self):
+        """
+        Test we initiate an inventory retrieval job if no job ID is supplied
+        """
+        fake_job_id = [None, None]
+        fake_sns_topic = [None, 'fake_topic']
+
+        for i in range(len(fake_job_id)):
+            backend = self.test_init_valid()
+            backend.retrieve_inventory(fake_job_id[i], sns_topic=fake_sns_topic[i])
+            backend.vault.retrieve_inventory.assert_called_once_with(sns_topic=fake_sns_topic[i], description="IceIt inventory job")
+            self.assertFalse(backend.vault.get_job.called)
+
+    def test_retrieve_inventory_with_job_id(self):
+        """
+        Test we initiate or get the status of an inventory retrieval job
+        """
+        fake_job_id = ['fake_job_id', 'fake_job_id']
+        fake_sns_topic = [None, 'fake_topic']
+
+        for i in range(len(fake_job_id)):
+            backend = self.test_init_valid()
+            backend.retrieve_inventory(fake_job_id[i], sns_topic=fake_sns_topic[i])
+            backend.vault.get_job.assert_called_once_with(fake_job_id[i])
