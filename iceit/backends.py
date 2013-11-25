@@ -39,6 +39,7 @@ class S3Backend:
         k = Key(self.bucket, key_name)
 
         encrypted_out = TemporaryFile()
+        log.debug("Saving contents of key %s to file %s" % (key_name, encrypted_out))
         k.get_contents_to_file(encrypted_out)
         encrypted_out.seek(0)
 
