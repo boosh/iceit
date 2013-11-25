@@ -1,5 +1,6 @@
 import unittest
 from mock import patch, Mock, PropertyMock
+from StringIO import StringIO
 
 from iceit.backends import S3Backend, S3ResponseError
 
@@ -24,6 +25,8 @@ class TestS3Backend(unittest.TestCase):
                                 bucket_name=bucket_name, s3_location=location)
             mock_connect_s3.assert_called_once_with(access_key, secret_key)
             mock_conn.get_bucket.assert_called_once_with(bucket_name)
+
+        return backend
 
     def test_init_invalid(self):
         """
@@ -68,3 +71,24 @@ class TestS3Backend(unittest.TestCase):
             mock_conn.get_bucket.assert_called_once_with(bucket_name)
 
             mock_conn.create_bucket.assert_called_once_with(bucket_name, location=location)
+
+    def test_download(self):
+        """
+        Test downloading works
+        """
+        fake_file_name = 'fake_file'
+        fake_contents = "This is the file contents"
+
+        with patch('iceit.backends.Key', spec=True) as mock_key:
+            with patch('iceit.backends.TemporaryFile', new_callable=StringIO) as mock_file:
+                backend = self.test_init_valid()
+                mock_file.write(fake_contents)
+
+                out_file = backend.download(fake_file_name)
+
+                assert out_file == mock_file
+
+                self.assertEqual(out_file.tell(), 0)
+                self.assertEqual(out_file.read(), fake_contents)
+                mock_key.assert_called_once_with(backend.bucket, fake_file_name)
+                mock_key.get_contents_to_file.assert_called_once_with(mock_file)

@@ -38,11 +38,11 @@ class S3Backend:
         """
         k = Key(self.bucket, key_name)
 
-        encrypted_out = TemporaryFile()
-        k.get_contents_to_file(encrypted_out)
-        encrypted_out.seek(0)
+        out_file = TemporaryFile()
+        k.get_contents_to_file(out_file)
+        out_file.seek(0)
 
-        return encrypted_out
+        return out_file
 
     def __progress_callback(self, complete, total):
         "Callback to display progress"
