@@ -4,13 +4,19 @@ import aaargh
 import logging
 import getpass
 import sys
+import os
 import boto
 from boto.s3.connection import Location
+
+# add the parent dir to the path so it can load the main modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 log = logging.getLogger(__name__)
 
 if not log.handlers:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+
+from iceit.iceit import IceIt, IceItException
 
 
 # CLI application

@@ -14,7 +14,7 @@ if not log.handlers:
 
 class S3Backend:
     """
-    Backend to handle S3 upload/download (modified from bakthat)
+    Backend to handle S3 upload/download
     """
     def __init__(self, access_key, secret_key, bucket_name, s3_location):
         log.info("Connecting to S3...")
@@ -23,7 +23,7 @@ class S3Backend:
         log.info("Done. Retrieving or creating bucket %s" % bucket_name)
         try:
             self.bucket = conn.get_bucket(bucket_name)
-        except S3ResponseError, e:
+        except S3ResponseError as e:
             if e.code == "NoSuchBucket":
                 self.bucket = conn.create_bucket(bucket_name, location=s3_location)
             else:
