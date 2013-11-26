@@ -25,6 +25,7 @@ import tarfile
 from tempfile import mkstemp, mkdtemp
 from time import strftime
 
+from .catalogue import Catalogue
 from .crypto import Encryptor
 from .utils import SetUtils, StringUtils, FileFinder
 from .backends import GlacierBackend, S3Backend

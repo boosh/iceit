@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 if not log.handlers:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
-from iceit.iceit import IceIt, IceItException
+from iceit.iceit import IceIt
+from iceit.exceptions import IceItException
 
 
 # CLI application
