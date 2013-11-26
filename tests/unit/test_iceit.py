@@ -1,9 +1,10 @@
 import unittest
+from datetime import datetime
 from mock import patch, Mock, mock_open
 
 from iceit.iceit import IceIt
 
-class TestIceit(unittest.TestCase):
+class TestIceIt(unittest.TestCase):
     """
     Test the IceIt class
     """
@@ -17,7 +18,7 @@ class TestIceit(unittest.TestCase):
             explicitly overridden
             """
             canned_values = [
-                ('processing', 'exclude_patterns', '.*1$,.*3$')     # exclude files ending with a 1 or a 3
+                ('processing', 'exclude_patterns', '.*1$,.*2$')     # exclude files ending with a 1 or a 2
             ]
 
             for canned_value in canned_values:
@@ -74,7 +75,7 @@ class TestIceit(unittest.TestCase):
     @patch('iceit.iceit.S3Backend')
     @patch('iceit.iceit.GlacierBackend')
     @patch('iceit.iceit.Catalogue')
-    def test_trim_ineligible_files_exclude_patterns(self, mock_catalogue, *args):
+    def test_trim_ineligible_files_exclude_patterns(self, *args):
         """
         Test that ineligible file exclusion patterns are applied
         """
@@ -93,7 +94,7 @@ class TestIceit(unittest.TestCase):
     @patch('iceit.iceit.S3Backend')
     @patch('iceit.iceit.GlacierBackend')
     @patch('iceit.iceit.Catalogue')
-    def test_trim_ineligible_files_exclude_patterns(self, mock_catalogue, *args):
+    def test_trim_ineligible_files_empty_set(self, *args):
         """
         Test that no potential files returns correctly
         """
@@ -107,3 +108,52 @@ class TestIceit(unittest.TestCase):
             results = iceit._IceIt__trim_ineligible_files(fake_files)
 
             self.assertEqual(0, len(results))
+
+    @patch('iceit.iceit.S3Backend')
+    @patch('iceit.iceit.GlacierBackend')
+    @patch('iceit.iceit.Catalogue')
+    def test_trim_ineligible_files_trims_correctly(self, mock_catalogue, *args):
+        """
+        Test that ineligible files already backed up and that haven't changed are removed
+        correctly
+        """
+        fake_mtime = 1234567890.0
+        fake_source_hash = 'abcdefgh'
+
+        # start at 3 because the first 2 file will be removed by our canned exclusion rules
+        fake_files = set(["/my/fake/file%d" % i for i in range(3, 11)])
+
+        def fake_catalogue_get(path):
+            """
+            Return canned responses for some paths so they'll be removed
+            """
+            print "fake_catalogue_get called with path '%s'" % path
+            mock_object = Mock()
+            if path.endswith('3'):
+                print "Applying canned file_mtime to mock %s" % mock_object
+                mock_object.file_mtime = datetime.fromtimestamp(fake_mtime)
+            elif path.endswith('4'):
+                print "Applying canned file_hash to mock %s" % mock_object
+                mock_object.source_hash = fake_source_hash
+
+            return [mock_object]
+
+        mock_catalogue.return_value = mock_catalogue
+        mock_catalogue.get.side_effect = fake_catalogue_get
+
+        fake_profile = "fake_profile"
+        mock_config = self.__get_fake_config()
+
+        with patch('iceit.iceit.Config', new=mock_config):
+            with patch('os.path.getmtime') as mock_getmtime:
+                mock_getmtime.return_value = fake_mtime
+                with patch('iceit.iceit.FileUtils') as mock_file_utils:
+                    mock_file_utils.get_file_hash.return_value = fake_source_hash
+
+                    iceit = IceIt(config_profile=fake_profile)
+                    results = iceit._IceIt__trim_ineligible_files(fake_files)
+
+                    # 2 files should have been skipped
+                    self.assertEqual(len(fake_files)-2, len(results))
+                    # 1 will have been skipped based on mtime so shouldn't have been hashed
+                    self.assertEqual(len(fake_files)-1, mock_file_utils.get_file_hash.call_count)

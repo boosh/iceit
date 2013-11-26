@@ -291,7 +291,6 @@ class IceIt(object):
                 # if the mtime hasn't changed, remove from eligible_files
                 log.info("File %s is already in the catalogue. Checking for changes..." % file_path)
                 current_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
-
                 if catalogue_item.file_mtime == current_mtime:
                     log.info("File has the same modification time as previous backup. Skipping.")
                     eligible_files -= set([file_path])
@@ -301,7 +300,6 @@ class IceIt(object):
                 log.info("File has a different modification time from previous backup. Checking hashes to confirm "
                          "modifications...")
                 current_hash = FileUtils.get_file_hash(file_path)
-
                 if catalogue_item.source_hash == current_hash:
                     log.info("File hash matches hash of backed up file. File will NOT be backed up on this run.")
                     eligible_files -= set([file_path])
