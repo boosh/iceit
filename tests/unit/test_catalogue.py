@@ -9,7 +9,8 @@ from iceit.catalogue import Catalogue
 
 class TestCatalogue(unittest.TestCase):
     """
-    Test the Catalogue class
+    Test the Catalogue class. Not mocking the backend because it needs to be
+    thoroughly tested.
     """
     def setUp(self):
         """
@@ -65,6 +66,45 @@ class TestCatalogue(unittest.TestCase):
             item['last_backed_up'] = datetime(year=2013, month=8, day=id)
             del(item['id'])
             self.assertTrue(self.catalogue.add_item(item=item, id=id))
+
+    def test_insert_duplicate_file_names(self):
+        """
+        Test setting an item with the same file name is allowed
+        """
+        fake_hash = 'asdf'
+        items = self.__build_items()
+        item = items[0]
+
+        self.assertTrue(self.catalogue.add_item(item=item))
+        item['source_hash'] = fake_hash
+
+        self.assertTrue(self.catalogue.add_item(item=item))
+        return fake_hash
+
+    def test_get_duplicate_file_names(self):
+        """
+        Trest retrieving an item which has duplicate entries in the catalogue
+        returns all entries
+        """
+        items = self.__build_items()
+        item = items[0]
+
+        fake_hash = self.test_insert_duplicate_file_names()
+
+        retrieved_items = self.catalogue.get(item['source_path'])
+
+        self.assertEqual(2, len(retrieved_items))
+
+        found_normal_hash = False
+        found_fake_hash = False
+        for retrieved_item in retrieved_items:
+            if retrieved_item['source_hash'] == item['source_hash']:
+                found_normal_hash = True
+            elif retrieved_item['source_hash'] == fake_hash:
+                found_fake_hash = True
+
+        self.assertTrue(found_fake_hash)
+        self.assertTrue(found_normal_hash)
 
     def test_get(self):
         """
