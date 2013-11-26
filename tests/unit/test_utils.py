@@ -3,8 +3,9 @@ import shutil
 import os.path
 import copy
 from tempfile import mkstemp, mkdtemp
+from mock import patch, Mock, mock_open
 
-from iceit.utils import SetUtils, StringUtils, FileFinder
+from iceit.utils import SetUtils, StringUtils, FileFinder, FileUtils
 
 class TestSetUtils(unittest.TestCase):
     """
@@ -90,6 +91,21 @@ class TestFileFinder(unittest.TestCase):
         files = file_finder.get_files()
 
         self.assertEqual(len(files), sum(self.FILES_PER_DIR))
+
+    def test_get_file_hash(self):
+        """
+        Test file hashes are calculated correctly
+        """
+        def permit_single_call():
+            data = ['fake input file data', None]
+            for d in data:
+                yield d
+
+        with patch('iceit.utils.open', mock_open(read_data='fake input file data'), create=True) as mock_open_obj:
+            mock_handle = mock_open_obj.return_value
+            mock_handle.read.side_effect = permit_single_call()
+            calculated_hash = FileUtils.get_file_hash('fake_path')
+            self.assertEqual('1de7e43607d31ade4a1f380f660d7b70410e35a12b7347edad92ddf21bbd2e7d', calculated_hash)
 
     @classmethod
     def tearDownClass(cls):

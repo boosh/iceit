@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import string
@@ -77,3 +78,24 @@ class FileFinder(object):
                 output.update(full_files)
 
         return output
+
+
+class FileUtils(object):
+    """
+    Misc utils on files
+    """
+    @staticmethod
+    def get_file_hash(file_path):
+        """
+        Generate a hash of the named file
+        """
+        hash = hashlib.sha256()
+        with open(file_path) as file:
+            while True:
+                data = file.read(1024*1024)
+                if not data:
+                    break
+
+                hash.update(data)
+
+        return hash.hexdigest()

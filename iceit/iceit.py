@@ -16,7 +16,6 @@ from bz2 import BZ2File
 import ConfigParser
 from copy import copy
 from datetime import datetime
-import hashlib
 import logging
 import os
 import random
@@ -27,7 +26,7 @@ from time import strftime
 
 from .catalogue import Catalogue
 from .crypto import Encryptor
-from .utils import SetUtils, StringUtils, FileFinder
+from .utils import SetUtils, StringUtils, FileFinder, FileUtils
 from .backends import GlacierBackend, S3Backend
 
 log = logging.getLogger(__name__)
@@ -301,7 +300,7 @@ class IceIt(object):
                 # if it has, hash the file and remove from eligible_files if the old and current hashes are the same
                 log.info("File has a different modification time from previous backup. Checking hashes to confirm "
                          "modifications...")
-                current_hash = self.__get_file_hash(file_path)
+                current_hash = FileUtils.get_file_hash(file_path)
 
                 if catalogue_item.source_hash == current_hash:
                     log.info("File hash matches hash of backed up file. File will NOT be backed up on this run.")
@@ -333,22 +332,6 @@ class IceIt(object):
         log.info("Compression finished.")
 
         return output_path
-
-    def __get_file_hash(self, file_path):
-        """
-        Generate a hash of the named file
-        """
-        hash = hashlib.sha256()
-        with open(file_path) as file:
-            while True:
-                data = file.read(1024*1024)
-                if not data:
-                    break
-
-                hash.update(data)
-
-        return hash.hexdigest()
-
 
     def __process_files(self, eligible_files):
         """
