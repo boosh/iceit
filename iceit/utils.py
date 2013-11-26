@@ -7,7 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 if not log.handlers:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
 
 class SetUtils(object):
@@ -35,7 +35,6 @@ class StringUtils(object):
             string.ascii_letters + string.digits) for x in range(length))
 
 
-
 class FileFinder(object):
     "Finds files using different methods"
 
@@ -45,6 +44,7 @@ class FileFinder(object):
         @param bool recursive - Whether to scan recursively or just return
             files in the input directory.
         """
+        log.debug("Initialising file finder with path '%s', recursive=%s" % (path, recursive))
         self.path = unicode(path)
         self.recursive = recursive
         self.files = None
@@ -56,11 +56,14 @@ class FileFinder(object):
         else:
             self.files = self.__get_files_non_recursive()
 
+        log.debug("Returning %d files: %s" % (len(self.files), self.files))
+
         return self.files
 
     def __get_files_non_recursive(self):
         "Only return files from the input directory."
         for (path, dirs, files) in os.walk(self.path):
+            log.debug("(Non-recursive file finder):Found %d files in %s: %s" % (len(files), self.path, files))
             return set([os.path.join(path, f) for f in files])
 
     def __get_files_recursive(self):
@@ -68,6 +71,7 @@ class FileFinder(object):
         output = set()
 
         for (path, dirs, files) in os.walk(self.path):
+            log.debug("(Recursive file finder):Found %d files in %s: %s" % (len(files), self.path, files))
             full_files = [os.path.join(path, f) for f in files]
             if full_files:
                 output.update(full_files)

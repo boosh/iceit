@@ -38,16 +38,23 @@ class S3Backend:
         """
         k = Key(self.bucket, key_name)
 
-        out_file = TemporaryFile()
-        k.get_contents_to_file(out_file)
-        out_file.seek(0)
+        encrypted_out = TemporaryFile()
+        log.debug("Saving contents of key %s to file %s" % (key_name, encrypted_out))
+        k.get_contents_to_file(encrypted_out)
+        encrypted_out.seek(0)
 
-        return out_file
+        return encrypted_out
 
-    def __progress_callback(self, complete, total):
-        "Callback to display progress"
+    def _progress_callback(self, complete, total):
+        """
+        Callback to display progress while uploading to S3
+
+        @return The calculated percentage transferred. Only really used for testing.
+        """
+        log.debug("Calculating total. Amount complete=%f, total=%f" % (complete, total))
         percent = int(complete * 100.0 / total)
         log.info("Upload completion: {}%".format(percent))
+        return percent
 
     def upload(self, key_name, file_name, cb=True):
         """
@@ -60,7 +67,7 @@ class S3Backend:
         k.encrypted = True
         upload_kwargs = {}
         if cb:
-            upload_kwargs = dict(cb=self.__progress_callback, num_cb=10)
+            upload_kwargs = dict(cb=self._progress_callback, num_cb=10)
         k.set_contents_from_filename(file_name, **upload_kwargs)
         log.debug("Upload complete. Marking object private")
         k.set_acl("private")

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 #
 # Inspired by duply/duplicity and bakthat.
@@ -23,79 +21,18 @@ import logging
 import os
 import random
 import re
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
 import tarfile
 from tempfile import mkstemp, mkdtemp
 from time import strftime
 
-from crypto import Encryptor
-from utils import SetUtils, StringUtils, FileFinder
-from backends import GlacierBackend, S3Backend
+from .crypto import Encryptor
+from .utils import SetUtils, StringUtils, FileFinder
+from .backends import GlacierBackend, S3Backend
 
 log = logging.getLogger(__name__)
 
 if not log.handlers:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
-
-class Catalogue(object):
-    """
-    Encapsulates the catalogue - the database of files stored, their modification times and hashes.
-    """
-    def __init__(self, dbpath):
-        self.tables = {}
-        self.engine = create_engine('sqlite:///%s' % dbpath)
-        self.__create_tables()
-
-        self.conn = self.engine.connect()
-
-    def __create_tables(self):
-        "Create necessary tables"
-        log.info("Creating DB tables...")
-        metadata = MetaData()
-        self.tables['files'] = Table('files', metadata,
-            Column('id', Integer, primary_key=True),
-            Column('source_path', String),
-            Column('aws_archive_id', String),
-            Column('file_mtime', DateTime),
-            Column('source_hash', String),
-            Column('processed_hash', String),
-            Column('last_backed_up', DateTime)
-        )
-
-        metadata.create_all(self.engine)
-        log.info("DB tables created...")
-
-    def get(self, file_path):
-        "Get a file entry or return an empty list if not found"
-        file_table = self.tables['files']
-
-        log.debug("Searching for file %s in catalogue..." % file_path)
-        query = select([file_table], file_table.c.source_path==file_path)
-        result = self.conn.execute(query)
-
-        rows = result.fetchall()
-
-        log.debug("%d record(s) found." % len(rows))
-
-        return rows
-
-    def add_item(self, item, id=None):
-        """
-        Add an item to the catalogue, or update the one with the given ID
-
-        @param dict item - A dictionary where keys correspond to column names in the 'files' table.
-        """
-        log.debug("Adding item to catalogue with data: %s" % item)
-        file_table = self.tables['files']
-        if id:
-            # update
-            query = file_table.update().where(file_table.c.id==id).values(item)
-        else:
-            # insert
-            query = file_table.insert().values(item)
-
-        return self.conn.execute(query)
-
 
 class Config(object):
     """
@@ -186,14 +123,10 @@ class Config(object):
             # File patterns (as reg exes) to exclude from backing up. Separate multiple with commas.
             self.config.set('processing', 'exclude_patterns', '^.*/desktop\.ini$')
 
-        self.config.write(open(self.get_config_file_path(), "w"))
+        with open(self.get_config_file_path(), "w") as file:
+            self.config.write(file)
 
         log.info("Config written to %s" % self.get_config_file_path())
-
-
-class IceItException(Exception):
-    "Base exception class"
-    pass
 
 
 class IceIt(object):
@@ -248,7 +181,7 @@ class IceIt(object):
 
     def set_key_id(self, key_id):
         "Set the ID of the key to use for encryption"
-        return self.encryptor.set_key_id(key_id)
+        self.encryptor.key_id = key_id
 
     def export_keys(self):
         "Export the key pair"
@@ -329,7 +262,7 @@ class IceIt(object):
 
         @return boolean True if we should encrypt files
         """
-        return len(self.encryptor.get_key_id()) > 0
+        return len(self.encryptor.key_id) > 0
 
     def __trim_ineligible_files(self, potential_files):
         """

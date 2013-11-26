@@ -1,8 +1,9 @@
 import unittest
-from mock import patch, Mock, PropertyMock
+from mock import patch, Mock
 from StringIO import StringIO
+from collections import namedtuple
 
-from iceit.backends import S3Backend, S3ResponseError
+from iceit.backends import S3Backend, S3ResponseError, GlacierBackend
 
 class TestS3Backend(unittest.TestCase):
     """
@@ -10,7 +11,7 @@ class TestS3Backend(unittest.TestCase):
     """
     def test_init_valid(self):
         """
-        Test that it can be initialised when using valid credentials
+        Test that S3 can be initialised when using valid credentials
         """
         access_key = 'fake_key'
         secret_key = 'fake_secret'
@@ -30,7 +31,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_init_invalid(self):
         """
-        Test how it handles an init failure not due to a bucket not existing
+        Test how the S3 backend handles an init failure not due to a bucket not existing
         """
         access_key = 'fake_key'
         secret_key = 'fake_secret'
@@ -49,7 +50,7 @@ class TestS3Backend(unittest.TestCase):
 
     def test_init_auto_create_bucket(self):
         """
-        Test that it automatically creates a bucket that doesn't exist
+        Test that we automatically create an S3 bucket if one doesn't exist
         """
         access_key = 'fake_key'
         secret_key = 'fake_secret'
@@ -74,21 +75,149 @@ class TestS3Backend(unittest.TestCase):
 
     def test_download(self):
         """
-        Test downloading works
+        Test downloading from S3 works
         """
-        fake_file_name = 'fake_file'
         fake_contents = "This is the file contents"
+        fake_key_name = 'fake_key_name'
+
+        with patch('iceit.backends.TemporaryFile', spec=True) as mock_file:
+            string_file = StringIO()
+            string_file.write(fake_contents)
+            mock_file.return_value = string_file
+
+            with patch('iceit.backends.Key', spec=True) as mock_key:
+                mock_key.return_value = mock_key
+                backend = self.test_init_valid()
+                result = backend.download(fake_key_name)
+
+                assert result is string_file
+                self.assertEqual(result.tell(), 0)
+                self.assertEqual(result.read(), fake_contents)
+                mock_key.assert_called_once_with(backend.bucket, fake_key_name)
+                mock_key.get_contents_to_file.assert_called_once_with(string_file)
+
+    def test__progress_callback(self):
+        """
+        Test the progress callback
+        """
+        backend = self.test_init_valid()
+
+        fake_total_size = 500
+        num_tests = 10
+        progress = 0
+
+        for i in range(num_tests):
+            result = backend._progress_callback(i * fake_total_size/num_tests, fake_total_size)
+            self.assertEqual(progress, result)
+            progress = progress + fake_total_size / (fake_total_size/num_tests)
+
+    def test_upload(self):
+        """
+        Test that uploading to S3 works
+        """
+        fake_key_name = 'fake_key_name'
+        fake_file_name = 'fake_file_name'
 
         with patch('iceit.backends.Key', spec=True) as mock_key:
-            with patch('iceit.backends.TemporaryFile', new_callable=StringIO) as mock_file:
-                backend = self.test_init_valid()
-                mock_file.write(fake_contents)
+            mock_key.return_value = mock_key
+            backend = self.test_init_valid()
 
-                out_file = backend.download(fake_file_name)
+            backend.upload(fake_key_name, fake_file_name)
+            mock_key.assert_called_once_with(backend.bucket, fake_key_name)
+            self.assertTrue(mock_key.encrypted)
+            self.assertTrue(mock_key.set_contents_from_filename.called)
+            mock_key.set_acl.assert_called_once_with("private")
 
-                assert out_file == mock_file
+    def test_ls(self):
+        """
+        Test ls returns data from S3
+        """
+        fake_key = namedtuple('Key', ['name'])
+        num_items = 10
+        items = []
+        for i in range(num_items):
+            items.append('item_%d' % i)
 
-                self.assertEqual(out_file.tell(), 0)
-                self.assertEqual(out_file.read(), fake_contents)
-                mock_key.assert_called_once_with(backend.bucket, fake_file_name)
-                mock_key.get_contents_to_file.assert_called_once_with(mock_file)
+        backend = self.test_init_valid()
+
+        backend.bucket.get_all_keys.return_value = [fake_key(name) for name in items]
+
+        results = backend.ls()
+        self.assertEqual(len(results), num_items)
+        self.assertEqual(results, items)
+
+    def test_delete(self):
+        """
+        Test S3 deletion works
+        """
+        fake_key_name = 'fake_key_name'
+
+        with patch('iceit.backends.Key', spec=True) as mock_key:
+            mock_key.return_value = mock_key
+            backend = self.test_init_valid()
+            backend.delete(fake_key_name)
+
+            mock_key.assert_called_once_with(backend.bucket, fake_key_name)
+            backend.bucket.delete_key.assert_called_once_with(mock_key)
+
+
+class TestGlacierBackend(unittest.TestCase):
+    """
+    Tests for the Glacier backend
+    """
+    def test_init_valid(self):
+        """
+        Test that Glacier can be initialised when using valid credentials
+        """
+        access_key = 'fake_key'
+        secret_key = 'fake_secret'
+        vault_name = 'fake_vault'
+        region_name = 'anywhere'
+
+        with patch('boto.connect_glacier') as mock_connect_glacier:
+            mock_conn = Mock()
+            mock_connect_glacier.return_value = mock_conn
+
+            backend = GlacierBackend(access_key=access_key, secret_key=secret_key,
+                vault_name=vault_name, region_name=region_name)
+            mock_connect_glacier.assert_called_once_with(region_name=region_name, aws_secret_access_key=secret_key,
+                                                         aws_access_key_id=access_key)
+            mock_conn.create_vault.assert_called_once_with(vault_name)
+
+        return backend
+
+    def test_upload(self):
+        """
+        Test we can upload to glacier
+        """
+        fake_file_name = 'fake_file_name'
+
+        backend = self.test_init_valid()
+        backend.upload(fake_file_name)
+
+        backend.vault.concurrent_create_archive_from_file.assert_called_once_with(fake_file_name, '')
+
+    def test_retrieve_inventory_no_job_id(self):
+        """
+        Test we initiate an inventory retrieval job if no job ID is supplied
+        """
+        fake_job_id = [None, None]
+        fake_sns_topic = [None, 'fake_topic']
+
+        for i in range(len(fake_job_id)):
+            backend = self.test_init_valid()
+            backend.retrieve_inventory(fake_job_id[i], sns_topic=fake_sns_topic[i])
+            backend.vault.retrieve_inventory.assert_called_once_with(sns_topic=fake_sns_topic[i], description="IceIt inventory job")
+            self.assertFalse(backend.vault.get_job.called)
+
+    def test_retrieve_inventory_with_job_id(self):
+        """
+        Test we initiate or get the status of an inventory retrieval job
+        """
+        fake_job_id = ['fake_job_id', 'fake_job_id']
+        fake_sns_topic = [None, 'fake_topic']
+
+        for i in range(len(fake_job_id)):
+            backend = self.test_init_valid()
+            backend.retrieve_inventory(fake_job_id[i], sns_topic=fake_sns_topic[i])
+            backend.vault.get_job.assert_called_once_with(fake_job_id[i])

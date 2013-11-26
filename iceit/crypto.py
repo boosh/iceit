@@ -1,8 +1,9 @@
 import os
 import gnupg
 import logging
+import pipes
 
-from iceit import IceItException
+from .exceptions import IceItException
 
 log = logging.getLogger(__name__)
 
@@ -18,15 +19,7 @@ class Encryptor(object):
         @param string key_id - The ID of the key to use for encryption
         """
         self.gpg = gnupg.GPG()
-        self.set_key_id(key_id)
-
-    def set_key_id(self, key_id):
-        "Set the key ID"
         self.key_id = key_id
-
-    def get_key_id(self):
-        "Return the encryption key ID"
-        return self.key_id
 
     def list_secret_keys(self):
         "Return a list of secret keys"
@@ -40,6 +33,8 @@ class Encryptor(object):
             - name_real - Real name of the user identity represented by the key
             - name_comment - A comment to attach to the user ID
             - name_email - An email address for the user
+
+        @return The ID of the new key
         """
         log.info("Generating GPG key pair")
         input_data = self.gpg.gen_key_input(key_type=key_type, key_length=length, name_real=options['name_real'],
@@ -85,11 +80,11 @@ class Encryptor(object):
         @param string output_dir - The file to write the encrypted file to.
         @param string output_extension - An extension to append to the file
         """
-        encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
-        encrypted_file_name = encrypted_file_name.replace('`', "'")
-
         if not self.key_id:
             raise IceItException("Can't encrypt files. Set the key ID first.")
+
+        encrypted_file_name = os.path.join(output_dir, "%s%s" % (os.path.basename(input_file), output_extension))
+        encrypted_file_name = pipes.quote(encrypted_file_name)
 
         if not os.path.exists(input_file):
             raise IceItException("Can't encrypt non-existent file '%s'" % input_file)
@@ -113,11 +108,11 @@ class Encryptor(object):
         @param string output_dir - The file to write the encrypted file to.
         @param string output_extension - An extension to append to the file
         """
-        encrypted_file_name = os.path.join(output_dir, os.path.basename(input_file) + output_extension)
-        encrypted_file_name = encrypted_file_name.replace('`', "'")
-
         if not os.path.exists(input_file):
             raise IceItException("Can't encrypt non-existent file '%s'" % input_file)
+
+        encrypted_file_name = os.path.join(output_dir, "%s%s" % (os.path.basename(input_file), output_extension))
+        encrypted_file_name = encrypted_file_name.replace('`', "'")
 
         log.info("Encrypting %s to %s using symmetric encryption" % (input_file, encrypted_file_name))
         with open(input_file) as file:
@@ -125,3 +120,4 @@ class Encryptor(object):
                 symmetric=True, passphrase=passphrase)
 
         return encrypted_file_name
+
