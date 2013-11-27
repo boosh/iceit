@@ -1,8 +1,10 @@
 import unittest
+import os.path
 from datetime import datetime
 from mock import patch, Mock, mock_open
 
 from iceit.iceit import IceIt
+from iceit.crypto import Encryptor
 
 class TestIceIt(unittest.TestCase):
     """
@@ -157,3 +159,57 @@ class TestIceIt(unittest.TestCase):
                     self.assertEqual(len(fake_files)-2, len(results))
                     # 1 will have been skipped based on mtime so shouldn't have been hashed
                     self.assertEqual(len(fake_files)-1, mock_file_utils.get_file_hash.call_count)
+
+    @patch('iceit.iceit.GlacierBackend')
+    @patch('iceit.iceit.Catalogue')
+    @patch('iceit.iceit.Encryptor')
+    @patch('iceit.iceit.S3Backend')
+    @patch('os.unlink')
+    @patch('iceit.iceit.tarfile')
+    def test_backup_encryption_keys(self, mock_tarfile, mock_unlink, mock_s3_backend, mock_encryptor, *args):
+        """
+        Test encryption keys are backed up correctly
+        """
+        fake_temporary_file_handle = 'fake_temporary_file_handle'
+        fake_temporary_file_path = '/my/dir/fake_temporary_file_path'
+
+        fake_public_key_path = 'fake_public_key_path'
+        fake_private_key_path = 'fake_private_key_path'
+        fake_passphrase = 'fake_passphrase'
+        fake_profile = "fake_profile"
+        mock_config = self.__get_fake_config()
+        mock_config.get_public_key_path.return_value = fake_public_key_path
+        mock_config.get_private_key_path.return_value = fake_private_key_path
+
+        mock_tarfile.return_value = mock_tarfile
+        mock_tarfile.open.return_value = mock_tarfile
+
+        fake_encrypted_file_path = 'fake_encrypted_file_path'
+
+        mock_encryptor.return_value = mock_encryptor
+        mock_encryptor.encrypt_symmetric.return_value = fake_encrypted_file_path
+
+        mock_s3_backend.return_value = mock_s3_backend
+        mock_s3_backend.upload.return_value = mock_s3_backend
+
+        with patch('iceit.iceit.Config', new=mock_config):
+            with patch('iceit.iceit.mkstemp') as mock_mkstemp:
+                mock_mkstemp.return_value = (fake_temporary_file_handle, fake_temporary_file_path)
+
+                iceit = IceIt(config_profile=fake_profile)
+
+                iceit.backup_encryption_keys(symmetric_passphrase=fake_passphrase)
+
+                self.assertEqual(1, mock_mkstemp.call_count)
+                self.assertEqual(1, mock_tarfile.open.call_count)
+                mock_tarfile.add.assert_any_call(fake_public_key_path)
+                mock_tarfile.add.assert_any_call(fake_private_key_path)
+
+                mock_encryptor.encrypt_symmetric.assert_called_once_with(output_dir=os.path.dirname(fake_temporary_file_path),
+                    passphrase=fake_passphrase, input_file=fake_temporary_file_path)
+
+                self.assertEqual(1, mock_s3_backend.upload.call_count)
+                mock_s3_upload_args = mock_s3_backend.upload.call_args
+                self.assertEqual(fake_encrypted_file_path, mock_s3_upload_args[0][1])
+
+                self.assertEqual(2, mock_unlink.call_count)
