@@ -4,6 +4,8 @@ import re
 import string
 import random
 import logging
+from bz2 import BZ2File
+from tempfile import mkstemp
 
 log = logging.getLogger(__name__)
 
@@ -99,3 +101,28 @@ class FileUtils(object):
                 hash.update(data)
 
         return hash.hexdigest()
+
+    @staticmethod
+    def compress_file(input_file, output_dir):
+        """
+        Compress a file. A new temporary file will be created and the handle returned.
+
+        @param string input_file - File to compress
+        @param string output_dir - Directory to write compressed file to
+        @return File The temporary File object where the input was compressed to
+        """
+        (output_handle, output_path) = mkstemp(dir=output_dir)
+        log.info("Compressing file %s to %s" % (input_file, output_path))
+
+        with BZ2File(output_path, 'w') as archive:
+            with open(input_file, 'r') as file:
+                while True:
+                    data = file.read(1024*1024)
+                    if not data:
+                        break
+
+                    archive.write(data)
+
+        log.info("Compression finished.")
+
+        return output_path

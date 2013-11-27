@@ -3,7 +3,8 @@ import shutil
 import os.path
 import copy
 from tempfile import mkstemp, mkdtemp
-from mock import patch, Mock, mock_open
+from bz2 import BZ2File
+from mock import patch, MagicMock, mock_open
 
 from iceit.utils import SetUtils, StringUtils, FileFinder, FileUtils
 
@@ -106,6 +107,39 @@ class TestFileFinder(unittest.TestCase):
             mock_handle.read.side_effect = permit_single_call()
             calculated_hash = FileUtils.get_file_hash('fake_path')
             self.assertEqual('1de7e43607d31ade4a1f380f660d7b70410e35a12b7347edad92ddf21bbd2e7d', calculated_hash)
+
+    def test_compress_file(self):
+        """
+        Test file compression makes the appropriate calls
+        """
+        def permit_single_call():
+            data = ['fake input file data', None]
+            for d in data:
+                yield d
+
+        fake_input_data = 'fake input file data'
+        fake_input_file_name = 'fake_input_file_name'
+        fake_output_dir = 'fake_output_dir'
+        fake_temporary_file_handle = 'fake_temporary_file_handle'
+        fake_temporary_file_path = 'fake_temporary_file_path'
+
+        with patch('iceit.utils.mkstemp') as mock_mkstemp:
+            mock_mkstemp.return_value = (fake_temporary_file_handle, fake_temporary_file_path)
+            with patch('iceit.utils.BZ2File', spec=BZ2File) as mock_bz2:
+                mock_bz2_handle = MagicMock()
+                mock_bz2_handle.write.return_value = None
+                mock_bz2_handle.__enter__.return_value = mock_bz2_handle
+                mock_bz2.return_value = mock_bz2_handle
+
+                with patch('iceit.utils.open', mock_open(read_data=fake_input_data), create=True) as mock_open_obj:
+                    mock_handle = mock_open_obj.return_value
+                    mock_handle.read.side_effect = permit_single_call()
+                    output_file_name = FileUtils.compress_file(input_file=fake_input_file_name, output_dir=fake_output_dir)
+
+                    mock_mkstemp.assert_called_once_with(dir=fake_output_dir)
+                    mock_bz2_handle.write.assert_called_once_with(fake_input_data)
+
+                    self.assertEqual(fake_temporary_file_path, output_file_name)
 
     @classmethod
     def tearDownClass(cls):

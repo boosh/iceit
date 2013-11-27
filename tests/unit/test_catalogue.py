@@ -26,7 +26,7 @@ class TestCatalogue(unittest.TestCase):
         @param include_id: If True, an ID field will be included
         @return list: A list of dicts representing items
         """
-        self.num_items = 10
+        self.num_items = 5
         self.base_path = '/my/path/file'
         items = []
 

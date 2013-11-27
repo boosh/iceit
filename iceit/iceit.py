@@ -12,7 +12,6 @@
 # @todo - An aggressive dedupe mode that compares candidate files by hashes in the db instead of looking at
 #         file name
 
-from bz2 import BZ2File
 import ConfigParser
 from copy import copy
 from datetime import datetime
@@ -307,30 +306,6 @@ class IceIt(object):
 
         return eligible_files
 
-    def __compress_file(self, input_file, output_dir):
-        """
-        Compress a file. A new temporary file will be created and the handle returned.
-
-        @param string input_file - File to compress
-        @param string output_dir - Directory to write compressed file to
-        @return File The temporary File object where the input was compressed to
-        """
-        (output_handle, output_path) = mkstemp(dir=output_dir)
-        log.info("Compressing file %s to %s" % (input_file, output_path))
-
-        with BZ2File(output_path, 'w') as archive:
-            with open(input_file, 'r') as file:
-                while True:
-                    data = file.read(1024*1024)
-                    if not data:
-                        break
-
-                    archive.write(data)
-
-        log.info("Compression finished.")
-
-        return output_path
-
     def __process_files(self, eligible_files):
         """
         Perform all necessary processing prior to initiating an upload to the file store, e.g. combine files that
@@ -376,7 +351,7 @@ class IceIt(object):
 
             # compress file
             if compress_file:
-                file_name = self.__compress_file(file_name, temp_dir)
+                file_name = FileUtils.compress_file(file_name, temp_dir)
 
             # encrypt file
             if self.encryption_enabled():
