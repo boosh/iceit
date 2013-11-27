@@ -4,7 +4,6 @@ from datetime import datetime
 from mock import patch, Mock, mock_open
 
 from iceit.iceit import IceIt
-from iceit.crypto import Encryptor
 
 class TestIceIt(unittest.TestCase):
     """
