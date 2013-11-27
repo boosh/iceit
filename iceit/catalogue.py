@@ -74,3 +74,7 @@ class Catalogue(object):
         log.debug("Result was: %s" % result)
 
         return result
+
+    #@todo: add a method that returns a count of objects in the database
+
+    #@todo: add a method that returns a list of objects in the database, possibly supporting filtering
