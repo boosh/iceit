@@ -1,5 +1,6 @@
 import unittest
 import os.path
+import copy
 from datetime import datetime
 from mock import patch, Mock, mock_open
 
@@ -19,7 +20,9 @@ class TestIceIt(unittest.TestCase):
             explicitly overridden
             """
             canned_values = [
-                ('processing', 'exclude_patterns', '.*1$,.*2$')     # exclude files ending with a 1 or a 2
+                ('processing', 'exclude_patterns', '.*1$,.*2$'),     # exclude files ending with a 1 or a 2
+                ('processing', 'disable_compression_patterns',
+                 ".*\.nocompress$,.*\.uncompressed$")   # don't compress files with these suffixes
             ]
 
             for canned_value in canned_values:
@@ -298,3 +301,102 @@ class TestIceIt(unittest.TestCase):
             mock_trim_ineligible_files.assert_called_once_with(set(fake_paths))
             mock_process_files.assert_called_once_with(fake_paths)
             mock_backup_catalogue_and_config.assert_called_once_with()
+
+    @patch('os.rmdir')
+    @patch('os.path.getmtime')
+    @patch('os.unlink')
+    @patch('iceit.iceit.S3Backend')
+    @patch('iceit.iceit.GlacierBackend')
+    @patch('os.symlink')
+    @patch('os.rename')
+    @patch('iceit.iceit.StringUtils')
+    @patch('iceit.iceit.Encryptor')
+    @patch('iceit.iceit.mkdtemp')
+    @patch('iceit.iceit.FileUtils')
+    @patch('iceit.iceit.Catalogue')
+    def test_process_files(self, mock_catalogue, mock_file_utils, mock_mkdtemp, mock_encryptor,
+                           mock_string_utils, mock_os_rename, mock_os_symlink,
+                           mock_glacier_backend, mock_s3_backend, mock_os_unlink, mock_os_getmtime,
+                           mock_os_rmdir):
+        """
+        Test that files are processed for backing up correctly
+        """
+        fake_mtime = 1234567890.0
+        mock_os_getmtime.return_value = fake_mtime
+
+        mock_glacier_backend.upload.side_effect = lambda file_name: "aws-archive-id-for-%s" % os.path.basename(file_name)
+
+        mock_string_utils.return_value = mock_string_utils
+        mock_string_utils.get_random_string.return_value = 'fake_random_string'
+
+        mock_encryptor.return_value = mock_encryptor
+        mock_encryptor.encrypt.side_effect = lambda file_name, dir: os.path.join(dir, "%s-encrypted" % file_name)
+
+        fake_temp_dir = '/a/fake/temp/dir'
+        mock_mkdtemp.side_effect = lambda suffix: fake_temp_dir + str(suffix)
+
+        mock_file_utils.return_value = mock_file_utils
+        fake_file_hash = 'fake_file_hash'
+        mock_file_utils.get_file_hash.side_effect = lambda path: "fake_file_hash-for-%s" % os.path.basename(path)
+
+        mock_file_utils.compress_file.side_effect = lambda file_name, dir: os.path.join(dir, "%s-compressed" % file_name)
+
+        fake_eligible_files = set([
+            '/my/fake/path/filea',
+            '/my/fake/path/fileb',
+            '/my/fake/path/filec',
+            '/my/fake/path/filed.nocompress',       # matches our canned no-compression regex
+            '/my/fake/path/filee.uncompressed',     # as above
+        ])
+
+#        def fake_catalogue_get(path):
+#            """
+#            Return canned responses for some paths so they'll be removed
+#            """
+#            print "fake_catalogue_get called with path '%s'" % path
+#            mock_object = Mock()
+#
+#            return [mock_object]
+
+        mock_catalogue.return_value = mock_catalogue
+#        mock_catalogue.get.side_effect = fake_catalogue_get
+
+        fake_profile = "fake_profile"
+        mock_config = self.__get_fake_config()
+
+        mock_config.getboolean.return_value = True
+
+        with patch('iceit.iceit.Config', new=mock_config):
+            iceit = IceIt(config_profile=fake_profile)
+
+            mock_encryption_enabled = Mock()
+            mock_encryption_enabled.return_value = True
+            iceit.encryption_enabled =  mock_encryption_enabled
+
+            iceit.encryptor = mock_encryptor
+            iceit.catalogue = mock_catalogue
+            iceit.long_term_storage_backend = mock_glacier_backend
+            iceit.config = mock_config
+
+            iceit._IceIt__process_files(fake_eligible_files)
+
+            self.assertEqual(len(fake_eligible_files), mock_catalogue.get.call_count)
+            self.assertEqual(len(fake_eligible_files)*2, mock_file_utils.get_file_hash.call_count)
+            self.assertEqual(len(fake_eligible_files)-2, mock_file_utils.compress_file.call_count)
+            self.assertEqual(len(fake_eligible_files), mock_encryptor.encrypt.call_count)
+            self.assertEqual(len(fake_eligible_files), mock_os_symlink.call_count)
+            self.assertEqual(len(fake_eligible_files), mock_glacier_backend.upload.call_count)
+
+            for (args, kwargs) in mock_glacier_backend.upload.call_args_list:
+                self.assertEqual('/a/fake/temp/dir-iceit/fake_random_string', args[0])
+
+            unseen_fake_eligible_files = copy.copy(fake_eligible_files)
+
+            self.assertEqual(len(fake_eligible_files), mock_catalogue.add_item.call_count)
+            for (args, kwargs) in mock_catalogue.add_item.call_args_list:
+                source_path = kwargs['item']['source_path']
+                expected_source_hash = 'fake_file_hash-for-%s' % os.path.basename(source_path)
+                self.assertEqual(kwargs['item']['source_hash'], expected_source_hash)
+                unseen_fake_eligible_files.discard(kwargs['item']['source_path'])
+
+            self.assertEqual(len(unseen_fake_eligible_files), 0)

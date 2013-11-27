@@ -335,7 +335,7 @@ class IceIt(object):
             if self.config.getboolean('catalogue', 'store_source_file_hashes') is True:
                 log.info("Generating hash of source file %s" % file_name)
                 # get a hash of the input file so we know when we've restored a file that it has been successful
-                source_file_hash = self.__get_file_hash(file_name)
+                source_file_hash = FileUtils.get_file_hash(file_name)
                 log.info("Source file SHA256 hash is %s" % source_file_hash)
             else:
                 source_file_hash = None
@@ -360,6 +360,7 @@ class IceIt(object):
 
             if self.config.getboolean('processing', 'obfuscate_file_names') is True:
                 old_file_name = file_name
+
                 file_name = os.path.join(temp_dir, StringUtils.get_random_string())
 
                 # if the file is already in temp_dir, rename it
@@ -371,7 +372,7 @@ class IceIt(object):
                     os.symlink(old_file_name, file_name)
 
             log.info("Generating hash of final processed file %s" % file_name)
-            final_file_hash = self.__get_file_hash(file_name)
+            final_file_hash = FileUtils.get_file_hash(file_name)
             log.info("Processed file SHA256 hash is %s" % final_file_hash)
 
             # upload to storage backend
