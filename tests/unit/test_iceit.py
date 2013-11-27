@@ -79,7 +79,7 @@ class TestIceIt(unittest.TestCase):
     @patch('iceit.iceit.S3Backend')
     @patch('iceit.iceit.GlacierBackend')
     @patch('iceit.iceit.Catalogue')
-    def test_trim_ineligible_files_exclude_patterns(self, *args):
+    def test_trim_ineligible_files_exclude_patterns(self, mock_catalogue, *args):
         """
         Test that ineligible file exclusion patterns are applied
         """
@@ -89,8 +89,11 @@ class TestIceIt(unittest.TestCase):
         fake_profile = "fake_profile"
         mock_config = self.__get_fake_config()
 
+        mock_catalogue.return_value = mock_catalogue
+
         with patch('iceit.iceit.Config', new=mock_config):
             iceit = IceIt(config_profile=fake_profile)
+            iceit.catalogue = mock_catalogue
             results = iceit._IceIt__trim_ineligible_files(fake_files)
 
             self.assertEqual(num_fake_files-2, len(results))
@@ -118,8 +121,7 @@ class TestIceIt(unittest.TestCase):
     @patch('iceit.iceit.Catalogue')
     def test_trim_ineligible_files_trims_correctly(self, mock_catalogue, *args):
         """
-        Test that ineligible files already backed up and that haven't changed are removed
-        correctly
+        Test that ineligible files already backed up and that haven't changed are removed correctly
         """
         fake_mtime = 1234567890.0
         fake_source_hash = 'abcdefgh'
@@ -155,6 +157,7 @@ class TestIceIt(unittest.TestCase):
                     mock_file_utils.get_file_hash.return_value = fake_source_hash
 
                     iceit = IceIt(config_profile=fake_profile)
+                    iceit.catalogue = mock_catalogue
                     results = iceit._IceIt__trim_ineligible_files(fake_files)
 
                     # 2 files should have been skipped
@@ -268,8 +271,9 @@ class TestIceIt(unittest.TestCase):
 
                 self.assertEqual(2, mock_unlink.call_count)
 
+    @patch('iceit.iceit.Catalogue')
     @patch('os.path.isdir')
-    def test_backup(self, mock_isdir):
+    def test_backup(self, mock_isdir, mock_catalogue):
         """
         Test the right calls are made to back up files
         """
@@ -278,10 +282,13 @@ class TestIceIt(unittest.TestCase):
         fake_profile = "fake_profile"
         mock_config = self.__get_fake_config()
 
+        mock_catalogue.return_value = mock_catalogue
+
         fake_paths = ['/my/fake/path/a', '/my/fake/path/b', '/my/fake/path/c']
 
         with patch('iceit.iceit.Config', new=mock_config):
             iceit = IceIt(config_profile=fake_profile)
+            iceit.catalogue = mock_catalogue
 
             mock_initialise_backends = Mock()
             mock_trim_ineligible_files = Mock()
@@ -349,17 +356,7 @@ class TestIceIt(unittest.TestCase):
             '/my/fake/path/filee.uncompressed',     # as above
         ])
 
-#        def fake_catalogue_get(path):
-#            """
-#            Return canned responses for some paths so they'll be removed
-#            """
-#            print "fake_catalogue_get called with path '%s'" % path
-#            mock_object = Mock()
-#
-#            return [mock_object]
-
         mock_catalogue.return_value = mock_catalogue
-#        mock_catalogue.get.side_effect = fake_catalogue_get
 
         fake_profile = "fake_profile"
         mock_config = self.__get_fake_config()

@@ -280,8 +280,6 @@ class IceIt(object):
         if len(potential_files) == 0:
             return potential_files
 
-        self.__open_catalogue()
-
         eligible_files = copy(potential_files)
 
         for file_path in potential_files:
@@ -429,18 +427,25 @@ class IceIt(object):
                 potential_files.update([path])
         log.info("%d files found in %d paths" % (len(potential_files), len(paths)))
 
-        # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
-        # been backed up previously and haven't since been modified, etc.
-        eligible_files = self.__trim_ineligible_files(potential_files)
+        try:
+            self.__open_catalogue()
 
-        if len(eligible_files) > 0:
-            # Perform all necessary processing to backup the file, e.g. compress files that should be compressed,
-            # encrypt files as necessary, obfuscate file names and upload to storage backend.
-            self.__process_files(eligible_files)
+            # remove ineligible files from the backup list, e.g. files that match exclusion patterns, files that have
+            # been backed up previously and haven't since been modified, etc.
+            eligible_files = self.__trim_ineligible_files(potential_files)
 
-            # if all went well, save new catalogue to highly available storage backend (S3)
-            self.__backup_catalogue_and_config()
+            if len(eligible_files) > 0:
+                # Perform all necessary processing to backup the file, e.g. compress files that should be compressed,
+                # encrypt files as necessary, obfuscate file names and upload to storage backend.
+                self.__process_files(eligible_files)
 
-            #@todo - purge old config backups
-        else:
-            log.info("No files need backing up.")
+                # if all went well, save new catalogue to highly available storage backend (S3)
+                self.__backup_catalogue_and_config()
+
+                #@todo - purge old config backups
+            else:
+                log.info("No files need backing up.")
+        except Exception as e:
+            log.exception("Caught an exception. Closing catalogue.")
+        finally:
+            self.catalogue.close()

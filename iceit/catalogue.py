@@ -34,6 +34,12 @@ class Catalogue(object):
         metadata.create_all(self.engine)
         log.info("DB tables created...")
 
+    def close(self):
+        """
+        Close the connection
+        """
+        return self.conn.close()
+
     def get(self, file_path):
         "Get a file entry or return an empty list if not found"
         file_table = self.tables['files']
