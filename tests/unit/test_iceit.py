@@ -264,3 +264,37 @@ class TestIceIt(unittest.TestCase):
                 self.assertEqual(fake_encrypted_file_path, mock_s3_upload_args[0][1])
 
                 self.assertEqual(2, mock_unlink.call_count)
+
+    @patch('os.path.isdir')
+    def test_backup(self, mock_isdir):
+        """
+        Test the right calls are made to back up files
+        """
+        mock_isdir.return_value = False
+
+        fake_profile = "fake_profile"
+        mock_config = self.__get_fake_config()
+
+        fake_paths = ['/my/fake/path/a', '/my/fake/path/b', '/my/fake/path/c']
+
+        with patch('iceit.iceit.Config', new=mock_config):
+            iceit = IceIt(config_profile=fake_profile)
+
+            mock_initialise_backends = Mock()
+            mock_trim_ineligible_files = Mock()
+            mock_trim_ineligible_files.return_value = fake_paths
+            mock_process_files = Mock()
+            mock_backup_catalogue_and_config = Mock()
+
+            # mock the complex methods and just assert they're called
+            iceit._IceIt__initialise_backends = mock_initialise_backends
+            iceit._IceIt__trim_ineligible_files = mock_trim_ineligible_files
+            iceit._IceIt__process_files = mock_process_files
+            iceit._IceIt__backup_catalogue_and_config = mock_backup_catalogue_and_config
+
+            iceit.backup(paths=fake_paths, recursive=False)
+
+            mock_initialise_backends.assert_called_once_with()
+            mock_trim_ineligible_files.assert_called_once_with(set(fake_paths))
+            mock_process_files.assert_called_once_with(fake_paths)
+            mock_backup_catalogue_and_config.assert_called_once_with()

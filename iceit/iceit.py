@@ -324,7 +324,7 @@ class IceIt(object):
 
         # paranoia - shuffle the order of the eligible_files so that no-one could know which encrypted file
         # corresponds to which uploaded file even if they had a directory listing of files that were uploaded
-        # and could inspect timestamps in Glacier
+        # and could inspect timestamps in Glacier (if all files were the same size)
         eligible_files_list = list(eligible_files)
         random.shuffle(eligible_files_list)
 
@@ -375,8 +375,8 @@ class IceIt(object):
             log.info("Processed file SHA256 hash is %s" % final_file_hash)
 
             # upload to storage backend
-# @todo split large files into smaller chunks and process them all together. The should be separately encrypted and
-# @todo hashed so we know when downloading that archives are integral
+# @todo split large files into smaller chunks and process them all together. They should be separately encrypted and
+# @todo hashed so we know when downloading that each piece is correct
 # @todo - confirm that uploads where errors were caught did actually upload correctly
             aws_archive_id = self.long_term_storage_backend.upload(file_name)
 
