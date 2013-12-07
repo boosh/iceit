@@ -253,6 +253,7 @@ def list_files(profile, filter, succinct):
             table.add_row(data)
 
         print table
+        print "Found %d results" % len(items)
     else:
         print "No items were found."
 

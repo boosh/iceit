@@ -19,6 +19,7 @@ class Catalogue(object):
 
     def __create_tables(self):
         "Create necessary tables"
+        # @todo: save file sizes here too
         log.info("Creating DB tables (if necessary)...")
         metadata = MetaData()
         self.tables['files'] = Table('files', metadata,
@@ -75,8 +76,6 @@ class Catalogue(object):
 
         return result
 
-    #@todo: add a method that returns a count of objects in the database
-
     def find_item(self, filter):
         """
         Find items in the catalogue that match the given filter
@@ -92,10 +91,12 @@ class Catalogue(object):
             log.info("Searching for backed up files containing '%s'" % filter)
             query = query.where(file_table.c.source_path.like('%%%s%%' % filter))
 
+        query = query.order_by(file_table.c.source_path)
+
+        log.debug("Executing query '%s'" % query)
         result = self.conn.execute(query)
 
         rows = result.fetchall()
-
         log.debug("%d record(s) found." % len(rows))
 
         return rows

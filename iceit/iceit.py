@@ -376,6 +376,7 @@ class IceIt(object):
         """
         Restore a particular catalogue and rename any existing one
         """
+        raise NotImplemented("This method needs finishing off...")
         self.__initialise_backends()
 
         log.debug("Creating temporary dir to download archive to")
