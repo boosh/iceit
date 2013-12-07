@@ -384,6 +384,9 @@ class IceIt(object):
     def find_in_catalogue(self, filter):
         """
         Find entries in the catalogue that match the given filter
+
+        @param filter: Optional filter to apply to file names
+
         :return: list of matching entries
         """
         try:
@@ -393,6 +396,7 @@ class IceIt(object):
 
             return items
         except Exception as e:
+            #@todo rethrow exception
             log.exception("Caught an exception. Closing catalogue.")
         finally:
             self.catalogue.close()

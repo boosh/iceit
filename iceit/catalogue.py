@@ -19,7 +19,7 @@ class Catalogue(object):
 
     def __create_tables(self):
         "Create necessary tables"
-        log.info("Creating DB tables...")
+        log.info("Creating DB tables (if necessary)...")
         metadata = MetaData()
         self.tables['files'] = Table('files', metadata,
             Column('id', Integer, primary_key=True),
@@ -32,7 +32,7 @@ class Catalogue(object):
         )
 
         metadata.create_all(self.engine)
-        log.info("DB tables created...")
+        log.info("DB tables created (if necessary)...")
 
     def close(self):
         """
@@ -87,6 +87,11 @@ class Catalogue(object):
         """
         file_table = self.tables['files']
         query = select([file_table])
+
+        if filter is not None:
+            log.info("Searching for backed up files containing '%s'" % filter)
+            query = query.where(file_table.c.source_path.like('%%%s%%' % filter))
+
         result = self.conn.execute(query)
 
         rows = result.fetchall()

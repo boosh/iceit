@@ -221,7 +221,8 @@ def list_remote_keys(profile):
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
 @app.cmd_arg('-f', '--filter', type=str, help="Optional file name filter", default=None)
-def list_files(profile, filter):
+@app.cmd_arg('-s', '--succinct', action='store_true', help="Show a compact output", default=False)
+def list_files(profile, filter, succinct):
     iceit = IceIt(profile)
     if not iceit.is_configured():
         raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
@@ -230,15 +231,23 @@ def list_files(profile, filter):
 
     if items:
         print "The following items can be restored:"
-        table = PrettyTable(["Name", "Last Modified", "Last backed up", "AWS Archive ID"])
+
+        columns = ["Name", "Last Modified", "Last backed up"]
+
+        if not succinct:
+            columns.append("AWS Archive ID")
+
+        table = PrettyTable(columns)
         table.align["Name"] = "l"
         table.align["Size (bytes)"] = "r"
 
         for catalogue in items:
-            table.add_row([catalogue['source_path'],
-                           catalogue['file_mtime'],
-                           catalogue['last_backed_up'],
-                           catalogue['aws_archive_id']])
+            data = [catalogue['source_path'], catalogue['file_mtime'], catalogue['last_backed_up']]
+
+            if not succinct:
+                data.append(catalogue['aws_archive_id'])
+
+            table.add_row(data)
 
         print table
     else:
