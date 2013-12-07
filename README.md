@@ -32,7 +32,14 @@ Installation under virtualenv
 Assuming you have virtualenv installed, do the following:
 
   * virtualenv venv
-  * pip install -r requirements.txt
+
+Then
+
+  * pip install git+git@github.com:boosh/iceit.git#egg=iceit
+
+or to develop iceit:
+
+  * pip install -e git+git@github.com:boosh/iceit.git#egg=iceit
 
 Usage
 -----
