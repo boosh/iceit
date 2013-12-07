@@ -4,7 +4,9 @@ argparse==1.2.1
 boto==2.7.0
 coverage==3.7
 distribute==0.6.24
+-e git+git@github.com:boosh/iceit.git@09e72e46953bf7e2ba22239bcc660a4e45647868#egg=iceit-dev
 mock==1.0.1
 nose==1.3.0
+prettytable==0.7.2
 python-gnupg==0.3.5
 wsgiref==0.1.2

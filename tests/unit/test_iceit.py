@@ -73,8 +73,8 @@ class TestIceIt(unittest.TestCase):
                     mock_s3_backend.assert_called_once_with('fake__aws__access_key', 'fake__aws__secret_key',
                         'fake__aws__s3_bucket', 'fake__aws__s3_location')
 
-                    self.assertIs(iceit.long_term_storage_backend, mock_glacier_backend)
-                    self.assertIs(iceit.ha_storage_backend, mock_s3_backend)
+                    self.assertIs(iceit.glacier_backend, mock_glacier_backend)
+                    self.assertIs(iceit.s3_backend, mock_s3_backend)
 
     @patch('iceit.iceit.S3Backend')
     @patch('iceit.iceit.GlacierBackend')
@@ -372,7 +372,7 @@ class TestIceIt(unittest.TestCase):
 
             iceit.encryptor = mock_encryptor
             iceit.catalogue = mock_catalogue
-            iceit.long_term_storage_backend = mock_glacier_backend
+            iceit.glacier_backend = mock_glacier_backend
             iceit.config = mock_config
 
             iceit._IceIt__process_files(fake_eligible_files)

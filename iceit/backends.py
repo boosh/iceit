@@ -74,7 +74,10 @@ class S3Backend:
 
     def ls(self):
         "List all keys in the bucket"
-        return [key.name for key in self.bucket.get_all_keys()]
+        return [{
+            'name': key.name, 'size':
+            key.size, 'last_modified':
+            key.last_modified} for key in self.bucket.get_all_keys()]
 
     def delete(self, key_name):
         """

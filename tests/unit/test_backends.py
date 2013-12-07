@@ -132,19 +132,23 @@ class TestS3Backend(unittest.TestCase):
         """
         Test ls returns data from S3
         """
-        fake_key = namedtuple('Key', ['name'])
+        fake_key = namedtuple('Key', ['name', 'last_modified', 'size'])
         num_items = 10
         items = []
         for i in range(num_items):
-            items.append('item_%d' % i)
+            items.append({'name': 'item_%d' % i, 'last_modified': 'fake_date', 'size': 100})
 
         backend = self.test_init_valid()
 
-        backend.bucket.get_all_keys.return_value = [fake_key(name) for name in items]
+        backend.bucket.get_all_keys.return_value = [fake_key(i['name'], i['last_modified'], i['size']) for i in items]
 
         results = backend.ls()
         self.assertEqual(len(results), num_items)
         self.assertEqual(results, items)
+
+        for item in results:
+            self.assertEqual(item['size'], 100)
+            self.assertEqual(item['last_modified'], 'fake_date')
 
     def test_delete(self):
         """

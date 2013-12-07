@@ -7,6 +7,7 @@ import sys
 import os
 import boto
 from boto.s3.connection import Location
+from prettytable import PrettyTable
 
 log = logging.getLogger(__name__)
 
@@ -150,6 +151,48 @@ def backup(profile, recursive, paths):
         raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
 
     iceit.backup(paths, recursive)
+
+
+@app.cmd(help="List catalogues in S3.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+def list_catalogues(profile):
+    iceit = IceIt(profile)
+    if not iceit.is_configured():
+        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+
+    catalogues = iceit.list_catalogues()
+
+    if catalogues:
+        print "The following catalogues can be restored:"
+        table = PrettyTable(["Name", "Last Modified", "Size (bytes)"])
+        table.align["Name"] = "l"
+        table.align["Size (bytes)"] = "r"
+
+        for catalogue in catalogues:
+            table.add_row([catalogue['name'], catalogue['last_modified'], catalogue['size']])
+
+        print table
+    else:
+        print "No catalogues were found."
+
+
+
+@app.cmd(help="Restore the catalogue from S3.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+@app.cmd_arg('-r', '--recursive', action="store_true", help="Backup directories recursively")
+@app.cmd_arg('paths', type=str, nargs="+", help="Directories/files to backup")
+def restore_catalogue(profile, recursive, paths):
+    iceit = IceIt(profile)
+    raise NotImplemented("To do")
+#    if not iceit.is_configured():
+#        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+#
+#    iceit.backup(paths, recursive)
+
 
 
 if __name__ == '__main__':
