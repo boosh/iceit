@@ -1,9 +1,11 @@
 import logging
 import boto.glacier
 import boto.s3
+from time import sleep
 
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
+from boto.glacier.exceptions import UploadArchiveError
 from tempfile import TemporaryFile
 
 log = logging.getLogger(__name__)
@@ -124,7 +126,20 @@ class GlacierBackend:
         @return string - AWS archive ID for the file
         """
         log.info("Uploading file '%s' to Glacier" % file_name)
-        return self.vault.concurrent_create_archive_from_file(file_name, '')
+
+        max_retries = 5
+        attempt = 1
+
+        while(True):
+            try:
+                return self.vault.concurrent_create_archive_from_file(file_name, '')
+            except UploadArchiveError as e:
+                if attempt >= max_retries:
+                    raise e
+
+                attempt += 1
+                # exponential back-off on failure
+                sleep(2**attempt)
 
     #    def download(self, keyname):
     #        """

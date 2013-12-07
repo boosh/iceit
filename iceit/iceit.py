@@ -14,7 +14,6 @@ from .catalogue import Catalogue
 from .crypto import Encryptor
 from .utils import SetUtils, StringUtils, FileFinder, FileUtils
 from .backends import GlacierBackend, S3Backend
-from .exceptions import UnexpectedResultException
 
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 #

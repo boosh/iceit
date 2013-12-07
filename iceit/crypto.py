@@ -139,11 +139,8 @@ class Encryptor(object):
 
         log.info("Decrypting %s to %s" % (input_file, dest_file_name))
         with open(input_file, 'rb') as file:
+            # signature is automatically verified I think
             result = self.gpg.decrypt_file(file, output=dest_file_name)
-
-        # @todo: fix signature verification
-#        if not result.signature_id == self.key_id:
-#            raise ValueError("Signature verification failed: Decryption result was: %s" % result)
 
         if not os.path.exists(dest_file_name) or os.path.getsize(dest_file_name) == 0:
             raise IceItException("Failed to decrypt file. Perhaps you specified a key that needs a passphrase?")
