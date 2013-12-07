@@ -153,11 +153,11 @@ def backup(profile, recursive, paths):
     iceit.backup(paths, recursive)
 
 
-@app.cmd(help="List catalogues in S3.")
+@app.cmd(help="List catalogues in S3 that can be restored.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
-def list_catalogues(profile):
+def list_remote_catalogues(profile):
     iceit = IceIt(profile)
     if not iceit.is_configured():
         raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
@@ -178,26 +178,24 @@ def list_catalogues(profile):
         print "No catalogues were found."
 
 
-@app.cmd(help="Restore the catalogue from S3.")
-@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
-                                       "profiles allow you to back up different parts of "
-                                       "your system using different settings.")
-@app.cmd_arg('-r', '--recursive', action="store_true", help="Backup directories recursively")
-@app.cmd_arg('paths', type=str, nargs="+", help="Directories/files to backup")
-def restore_catalogue(profile, recursive, paths):
-    iceit = IceIt(profile)
-    raise NotImplemented("To do")
+#@app.cmd(help="Restore a catalogue from S3. The existing catalogue file will be renamed.")
+#@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+#                                       "profiles allow you to back up different parts of "
+#                                       "your system using different settings.")
+#@app.cmd_arg('name', type=str, help="Name of the catalogue file to restore.")
+#def restore_remote_catalogue(profile, name):
+#    iceit = IceIt(profile)
 #    if not iceit.is_configured():
 #        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
 #
-#    iceit.backup(paths, recursive)
+#    iceit.restore_catalogue(name)
 
 
-@app.cmd(help="List keys in S3.")
+@app.cmd(help="List keys in S3 that can be restored.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
-def list_keys(profile):
+def list_remote_keys(profile):
     iceit = IceIt(profile)
     if not iceit.is_configured():
         raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
