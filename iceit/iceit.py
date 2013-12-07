@@ -363,10 +363,20 @@ class IceIt(object):
 
     def list_catalogues(self):
         """
-        List available catalogues
+        List catalogues backed up to S3
         """
         self.__initialise_backends()
 
         catalogues = [i for i in self.s3_backend.ls() if i['name'].startswith(self.config.get('aws', 's3_catalogue_prefix'))]
 
         return sorted(catalogues)
+
+    def list_keys(self):
+        """
+        List keys backed up to S3
+        """
+        self.__initialise_backends()
+
+        keys = [i for i in self.s3_backend.ls() if i['name'].startswith(self.config.get('aws', 's3_key_prefix'))]
+
+        return sorted(keys)

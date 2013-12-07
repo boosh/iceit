@@ -178,7 +178,6 @@ def list_catalogues(profile):
         print "No catalogues were found."
 
 
-
 @app.cmd(help="Restore the catalogue from S3.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "
@@ -193,6 +192,30 @@ def restore_catalogue(profile, recursive, paths):
 #
 #    iceit.backup(paths, recursive)
 
+
+@app.cmd(help="List keys in S3.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+def list_keys(profile):
+    iceit = IceIt(profile)
+    if not iceit.is_configured():
+        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+
+    keys = iceit.list_keys()
+
+    if keys:
+        print "The following keys can be restored:"
+        table = PrettyTable(["Name", "Last Modified", "Size (bytes)"])
+        table.align["Name"] = "l"
+        table.align["Size (bytes)"] = "r"
+
+        for catalogue in keys:
+            table.add_row([catalogue['name'], catalogue['last_modified'], catalogue['size']])
+
+        print table
+    else:
+        print "No keys were found."
 
 
 if __name__ == '__main__':
