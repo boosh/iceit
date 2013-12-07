@@ -216,5 +216,34 @@ def list_remote_keys(profile):
         print "No keys were found."
 
 
+@app.cmd(help="List entries in the local catalogue.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+@app.cmd_arg('-f', '--filter', type=str, help="Optional file name filter", default=None)
+def list_files(profile, filter):
+    iceit = IceIt(profile)
+    if not iceit.is_configured():
+        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+
+    items = iceit.find_in_catalogue(filter=filter)
+
+    if items:
+        print "The following items can be restored:"
+        table = PrettyTable(["Name", "Last Modified", "Last backed up", "AWS Archive ID"])
+        table.align["Name"] = "l"
+        table.align["Size (bytes)"] = "r"
+
+        for catalogue in items:
+            table.add_row([catalogue['source_path'],
+                           catalogue['file_mtime'],
+                           catalogue['last_backed_up'],
+                           catalogue['aws_archive_id']])
+
+        print table
+    else:
+        print "No items were found."
+
+
 if __name__ == '__main__':
     app.run()

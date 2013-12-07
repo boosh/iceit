@@ -77,4 +77,20 @@ class Catalogue(object):
 
     #@todo: add a method that returns a count of objects in the database
 
-    #@todo: add a method that returns a list of objects in the database, possibly supporting filtering
+    def find_item(self, filter):
+        """
+        Find items in the catalogue that match the given filter
+
+        @param filter: Optional filter to apply to file names in the catalogue
+
+        :return: list Of matching entries
+        """
+        file_table = self.tables['files']
+        query = select([file_table])
+        result = self.conn.execute(query)
+
+        rows = result.fetchall()
+
+        log.debug("%d record(s) found." % len(rows))
+
+        return rows

@@ -380,3 +380,19 @@ class IceIt(object):
         keys = [i for i in self.s3_backend.ls() if i['name'].startswith(self.config.get('aws', 's3_key_prefix'))]
 
         return sorted(keys)
+
+    def find_in_catalogue(self, filter):
+        """
+        Find entries in the catalogue that match the given filter
+        :return: list of matching entries
+        """
+        try:
+            self.__open_catalogue()
+
+            items = self.catalogue.find_item(filter)
+
+            return items
+        except Exception as e:
+            log.exception("Caught an exception. Closing catalogue.")
+        finally:
+            self.catalogue.close()
