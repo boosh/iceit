@@ -232,8 +232,8 @@ class TestIceIt(unittest.TestCase):
         fake_temporary_file_handle = 'fake_temporary_file_handle'
         fake_temporary_file_path = '/my/dir/fake_temporary_file_path'
 
-        fake_catalogue_path = 'fake_catalogue_path'
-        fake_config_file_path = 'fake_config_file_path'
+        fake_catalogue_path = '/my/fake/catalogue_path'
+        fake_config_file_path = '/a/fake/config_file_path'
         fake_profile = "fake_profile"
         mock_config = self.__get_fake_config()
         mock_config.get_catalogue_path.return_value = fake_catalogue_path
@@ -260,8 +260,8 @@ class TestIceIt(unittest.TestCase):
 
                 self.assertEqual(1, mock_mkstemp.call_count)
                 self.assertEqual(1, mock_tarfile.open.call_count)
-                mock_tarfile.add.assert_any_call(fake_catalogue_path)
-                mock_tarfile.add.assert_any_call(fake_config_file_path)
+                mock_tarfile.add.assert_any_call(name=fake_catalogue_path, arcname=os.path.basename(fake_catalogue_path))
+                mock_tarfile.add.assert_any_call(name=fake_config_file_path, arcname=os.path.basename(fake_config_file_path))
 
                 mock_encryptor.encrypt.assert_called_once_with(output_dir=os.path.dirname(fake_temporary_file_path), input_file=fake_temporary_file_path)
 

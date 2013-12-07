@@ -178,17 +178,20 @@ def list_remote_catalogues(profile):
         print "No catalogues were found."
 
 
-#@app.cmd(help="Restore a catalogue from S3. The existing catalogue file will be renamed.")
-#@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
-#                                       "profiles allow you to back up different parts of "
-#                                       "your system using different settings.")
-#@app.cmd_arg('name', type=str, help="Name of the catalogue file to restore.")
-#def restore_remote_catalogue(profile, name):
-#    iceit = IceIt(profile)
-#    if not iceit.is_configured():
-#        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
-#
-#    iceit.restore_catalogue(name)
+@app.cmd(help="Restore a catalogue from S3. The existing catalogue file will be renamed.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+@app.cmd_arg('name', type=str, help="Name of the catalogue file to restore.")
+def restore_remote_catalogue(profile, name):
+
+    log.info("Retrieving catalogue '%s' from bucket" % name)
+
+    iceit = IceIt(profile)
+    if not iceit.is_configured():
+        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+
+    iceit.restore_catalogue(name)
 
 
 @app.cmd(help="List keys in S3 that can be restored.")

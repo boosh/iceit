@@ -36,11 +36,11 @@ class S3Backend:
 
         @param string key_name - Key of the file to download
         """
-        k = Key(self.bucket, key_name)
+        key = Key(self.bucket, key_name)
 
         encrypted_out = TemporaryFile()
         log.debug("Saving contents of key %s to file %s" % (key_name, encrypted_out))
-        k.get_contents_to_file(encrypted_out)
+        key.get_contents_to_file(encrypted_out)
         encrypted_out.seek(0)
 
         return encrypted_out
@@ -63,14 +63,14 @@ class S3Backend:
         @param string key_name - Key of the file to upload
         """
         log.debug("Uploading file %s to S3 under key %s" % (file_name, key_name))
-        k = Key(self.bucket, key_name)
-        k.encrypted = True
+        key = Key(self.bucket, key_name)
+        key.encrypted = True
         upload_kwargs = {}
         if cb:
             upload_kwargs = dict(cb=self._progress_callback, num_cb=10)
-        k.set_contents_from_filename(file_name, **upload_kwargs)
+        key.set_contents_from_filename(file_name, **upload_kwargs)
         log.debug("Upload complete. Marking object private")
-        k.set_acl("private")
+        key.set_acl("private")
 
     def ls(self):
         "List all keys in the bucket"
@@ -79,14 +79,27 @@ class S3Backend:
             key.size, 'last_modified':
             key.last_modified} for key in self.bucket.get_all_keys()]
 
+    def get_to_file(self, key, path):
+        """
+        Retrieve a specific object and write it to the given path
+
+        @param key: The key of the object to retrieve
+        @param path: Where to write the file to
+        """
+        log.debug("Retreiving key '%s' from bucket '%s'" % (key, self.bucket))
+        key = Key(self.bucket, key)
+        log.debug("Writing to file '%s'" % path)
+        key.get_contents_to_filename(path)
+        log.debug("File written")
+
     def delete(self, key_name):
         """
         Delete an object from the bucket
 
         @param string key_name - Key of the object to delete
         """
-        k = Key(self.bucket, key_name)
-        return self.bucket.delete_key(k)
+        key = Key(self.bucket, key_name)
+        return self.bucket.delete_key(key)
 
 
 class GlacierBackend:

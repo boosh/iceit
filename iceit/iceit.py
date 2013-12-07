@@ -14,6 +14,7 @@ from .catalogue import Catalogue
 from .crypto import Encryptor
 from .utils import SetUtils, StringUtils, FileFinder, FileUtils
 from .backends import GlacierBackend, S3Backend
+from .exceptions import UnexpectedResultException
 
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 #
@@ -139,11 +140,11 @@ class IceIt(object):
         tar_archive = tarfile.open(name=archive_path, mode='w:bz2')
         catalogue_path = self.config.get_catalogue_path()
         log.info("Adding catalogue '%s' to config backup archive '%s'" % (catalogue_path, archive_path))
-        tar_archive.add(catalogue_path)
+        tar_archive.add(name=catalogue_path, arcname=os.path.basename(catalogue_path))
 
         config_path = self.config.get_config_file_path()
         log.info("Adding config file '%s' to config backup archive '%s'" % (config_path, archive_path))
-        tar_archive.add(config_path)
+        tar_archive.add(name=config_path, arcname=os.path.basename(config_path))
         log.info("Closing config backup archive")
         tar_archive.close()
 
@@ -370,6 +371,48 @@ class IceIt(object):
         catalogues = [i for i in self.s3_backend.ls() if i['name'].startswith(self.config.get('aws', 's3_catalogue_prefix'))]
 
         return sorted(catalogues)
+
+    def restore_catalogue(self, name):
+        """
+        Restore a particular catalogue and rename any existing one
+        """
+        self.__initialise_backends()
+
+        log.debug("Creating temporary dir to download archive to")
+        temp_dir = mkdtemp(prefix='iceit-catalogue-restore')
+        log.debug("Created %s" % temp_dir)
+
+        (handle, temp_file_path) = mkstemp(prefix='iceit-catalogue-', dir=temp_dir)
+
+        log.info("Retrieving file '%s' to temporary path '%s'" % (name, temp_file_path))
+        self.s3_backend.get_to_file(name, temp_file_path)
+
+        log.info("Decrypting retrieved archive")
+        decrypted_archive = self.encryptor.decrypt(input_file=temp_file_path, output_dir=os.path.dirname(temp_file_path))
+
+        log.info("Extracting decrypted archive")
+
+        if not tarfile.is_tarfile(decrypted_archive):
+            raise RuntimeError("Error: Unable to read tar file '%s'" % decrypted_archive)
+
+        tar_archive = tarfile.open(name=decrypted_archive, mode='r:bz2')
+        log.info("Extracting contents of archive to '%s'" % temp_dir)
+        tar_archive.extractall(path=temp_dir)
+        tar_archive.close()
+
+# @todo: restore catalogue from the extracted archive,then delete the downloaded archive
+# @todo: and files. Also provide an option to restore the config as well
+#        existing_catalogue_path = self.config.get_catalogue_path()
+#
+#        if os.path.exists(existing_catalogue_path):
+#            new_catalogue_path = "%s-%s" % (existing_catalogue_path, strftime("%Y%m%d%H%M%S"))
+#            log.info("Renaming existing catalogue from %s to %s" % (existing_catalogue_path, new_catalogue_path))
+#
+#            os.rename(existing_catalogue_path, new_catalogue_path)
+#
+#        log.info("Moving downloaded catalogue from '%s' to '%s'" % (os.path.join(temp_dir, self.config.get('catalogue', 'name')),
+#                                                                    existing_catalogue_path))
+#        os.rename(temp_file_path, existing_catalogue_path)
 
     def list_keys(self):
         """
