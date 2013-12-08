@@ -472,8 +472,29 @@ class IceIt(object):
         """
         List glacier jobs
 
-        :return: List of boto.glacier.job.Job objects
+        :return: List of objects containing information about jobs
         """
         self.__initialise_backends()
 
-        return self.glacier_backend.list_jobs()
+        jobs = self.glacier_backend.list_jobs()
+
+        try:
+            self.__open_catalogue()
+
+            # translate AWS archive IDs to file names
+            for job in jobs:
+                log.debug("Trying to find source_path to match AWS archive ID '%s'" % job.archive_id)
+                row = self.catalogue.find_item(filter_field='aws_archive_id', filter=job.archive_id)
+
+                log.debug("Found %d results" % len(row))
+
+                if len(row) == 1:
+                    job.source_path = row[0][1]
+
+        except Exception as e:
+            #@todo rethrow exception
+            log.exception("Caught an exception. Closing catalogue.")
+        finally:
+            self.catalogue.close()
+
+        return jobs

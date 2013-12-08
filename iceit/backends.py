@@ -225,16 +225,6 @@ class GlacierBackend:
         log.debug("Listing jobs associated with vault '%s'" % self.vault_name)
         return self.vault.list_jobs()
 
-#
-#    def retrieve_archive(self, archive_id, jobid):
-#        """
-#        Initiate a job to retrieve Glacier archive or download archive
-#        """
-#        if jobid is None:
-#            return self.vault.retrieve_archive(archive_id, sns_topic=None, description='Retrieval job')
-#        else:
-#            return self.vault.get_job(jobid)
-#
 #    def delete(self, keyname):
 #        archive_id = self.get_archive_id(keyname)
 #        if archive_id:

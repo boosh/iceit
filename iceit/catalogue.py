@@ -74,10 +74,11 @@ class Catalogue(object):
 
         return result
 
-    def find_item(self, filter):
+    def find_item(self, filter_field='source_path', filter=None):
         """
         Find items in the catalogue that match the given filter
 
+        @param filter_field: Field to filter search by.
         @param filter: Optional filter to apply to file names in the catalogue
 
         :return: list Of matching entries
@@ -87,7 +88,10 @@ class Catalogue(object):
 
         if filter is not None:
             log.info("Searching for backed up files containing '%s'" % filter)
-            query = query.where(file_table.c.source_path.like('%%%s%%' % filter))
+
+            column = getattr(file_table.c, filter_field)
+
+            query = query.where(column.like('%%%s%%' % filter))
 
         query = query.order_by(file_table.c.source_path)
 

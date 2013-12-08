@@ -338,12 +338,20 @@ def list_jobs(profile):
     iceit = __instantiate_iceit(profile)
     jobs = iceit.list_jobs()
 
-    table = PrettyTable(['Created', 'Job ID', 'Description', 'Action', 'Completed', 'Status message'])
+    print "Found %d jobs" % len(jobs)
 
     for job in jobs:
-        table.add_row([job.creation_date, job.id, job.description, job.action, job.completed, job.status_message])
-
-    print table
+        print "Job ID: %s" % job.id
+        print "Created: %s" % job.creation_date
+        print "Action: %s" % job.action
+        print "Archive ID: %s" % job.archive_id
+        try:
+            print "Source path: %s" % job.source_path
+        except AttributeError:
+            pass
+        print "Completed: %s" % job.completed
+        print "Status message: %s" % job.status_message
+        print
 
 if __name__ == '__main__':
     app.run()
