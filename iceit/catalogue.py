@@ -1,10 +1,8 @@
-import logging
 from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, select
+from .log import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
-if not log.handlers:
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
 class Catalogue(object):
     """

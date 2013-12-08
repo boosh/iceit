@@ -1,11 +1,11 @@
 import ConfigParser
 from copy import copy
 from datetime import datetime
-import logging
 import os
 import random
 import re
 import tarfile
+import shutil
 from tempfile import mkstemp, mkdtemp
 from time import strftime
 
@@ -14,6 +14,9 @@ from .catalogue import Catalogue
 from .crypto import Encryptor
 from .utils import SetUtils, StringUtils, FileFinder, FileUtils
 from .backends import GlacierBackend, S3Backend
+from .log import get_logger
+
+log = get_logger(__name__)
 
 # Put your files on ice. Compress, encrypt, obfuscate and archive them on Amazon Glacier.
 #
@@ -28,11 +31,6 @@ from .backends import GlacierBackend, S3Backend
 #         Also allow an output path to be specified.
 # @todo - An aggressive dedupe mode that compares candidate files by hashes in the db instead of looking at
 #         file name
-
-log = logging.getLogger(__name__)
-
-if not log.handlers:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
 
 class IceIt(object):
@@ -375,7 +373,6 @@ class IceIt(object):
         """
         Restore a particular catalogue and rename any existing one
         """
-        raise NotImplemented("This method needs finishing off...")
         self.__initialise_backends()
 
         log.debug("Creating temporary dir to download archive to")
@@ -400,19 +397,25 @@ class IceIt(object):
         tar_archive.extractall(path=temp_dir)
         tar_archive.close()
 
-# @todo: restore catalogue from the extracted archive,then delete the downloaded archive
-# @todo: and files. Also provide an option to restore the config as well
-#        existing_catalogue_path = self.config.get_catalogue_path()
-#
-#        if os.path.exists(existing_catalogue_path):
-#            new_catalogue_path = "%s-%s" % (existing_catalogue_path, strftime("%Y%m%d%H%M%S"))
-#            log.info("Renaming existing catalogue from %s to %s" % (existing_catalogue_path, new_catalogue_path))
-#
-#            os.rename(existing_catalogue_path, new_catalogue_path)
-#
-#        log.info("Moving downloaded catalogue from '%s' to '%s'" % (os.path.join(temp_dir, self.config.get('catalogue', 'name')),
-#                                                                    existing_catalogue_path))
-#        os.rename(temp_file_path, existing_catalogue_path)
+        log.info("Deleting downloaded archive '%s'" % decrypted_archive)
+        os.unlink(decrypted_archive)
+
+        existing_catalogue_path = self.config.get_catalogue_path()
+
+        if os.path.exists(existing_catalogue_path):
+            new_catalogue_path = "%s-%s" % (existing_catalogue_path, strftime("%Y%m%d%H%M%S"))
+            log.info("Renaming existing catalogue from %s to %s" % (existing_catalogue_path, new_catalogue_path))
+
+            os.rename(existing_catalogue_path, new_catalogue_path)
+
+        restored_catalogue_path = os.path.join(temp_dir, self.config.get('catalogue', 'name'))
+
+        log.info("Moving downloaded catalogue from '%s' to '%s'" % (restored_catalogue_path,
+                                                                    existing_catalogue_path))
+        os.rename(restored_catalogue_path, existing_catalogue_path)
+
+        log.info("Deleting temporary directory '%s'" % temp_dir)
+        shutil.rmtree(temp_dir)
 
     def list_keys(self):
         """

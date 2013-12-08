@@ -1,4 +1,3 @@
-import logging
 import boto.glacier
 import boto.s3
 from time import sleep
@@ -7,11 +6,9 @@ from boto.s3.key import Key
 from boto.exception import S3ResponseError
 from boto.glacier.exceptions import UploadArchiveError
 from tempfile import TemporaryFile
+from .log import get_logger
 
-log = logging.getLogger(__name__)
-
-if not log.handlers:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+log = get_logger(__name__)
 
 
 class S3Backend:

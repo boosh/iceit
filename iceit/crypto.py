@@ -1,14 +1,12 @@
 import os
 import gnupg
-import logging
 import pipes
 
 from .exceptions import IceItException
+from .log import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
-if not log.handlers:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
 class Encryptor(object):
     """

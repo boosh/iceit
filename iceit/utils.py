@@ -3,14 +3,11 @@ import os
 import re
 import string
 import random
-import logging
 from bz2 import BZ2File
 from tempfile import mkstemp
+from .log import get_logger
 
-log = logging.getLogger(__name__)
-
-if not log.handlers:
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
+log = get_logger(__name__)
 
 
 class SetUtils(object):

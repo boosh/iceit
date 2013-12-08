@@ -1,11 +1,8 @@
 import os
 import ConfigParser
-import logging
+from .log import get_logger
 
-log = logging.getLogger(__name__)
-
-if not log.handlers:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+log = get_logger(__name__)
 
 
 class Config(object):
