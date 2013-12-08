@@ -395,6 +395,7 @@ def download(profile, dest, job_ids):
 
     if len(found_jobs) != len(job_ids):
         print "Error: Couldn't find the following jobs: %s" % ', '.join(set(job_ids) - set(found_jobs))
+        return 1
 
     iceit.download(dest=dest, jobs=found_jobs)
 

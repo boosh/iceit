@@ -172,7 +172,9 @@ class GlacierBackend:
             dest_path = os.path.join(dest_dir, job.id)
 
             with open(dest_path, 'w') as f:
-                f.write(str(inventory['ArchiveList']))
+                f.writelines("ArchiveId,CreationDate,Size\n")
+                for item in inventory['ArchiveList']:
+                    f.writelines("%s,%s,%s\n" % (item['ArchiveId'], item['CreationDate'], item['Size']))
 
             return dest_path
 
