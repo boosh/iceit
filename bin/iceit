@@ -45,7 +45,7 @@ def configure(profile):
     settings['aws']["glacier_region"] = raw_input("Glacier region (possible values are %s): " % ', '.join([r.name for r in glacier_regions]))
     settings['aws']["glacier_vault"] = raw_input("Glacier Vault Name (will be created if it doesn't exist): ")
 
-    settings['aws']['sns_topic_arn'] = raw_input("SNS topic ARN to which you want to job notifications sending "
+    settings['aws']['sns_topic_arn'] = raw_input("SNS topic ARN to which you want job notifications sending "
                                                  "(leave blank to disable): ")
 
     iceit = IceIt(profile)
@@ -325,7 +325,8 @@ def create_archive_retrieval_job(profile, aws_archive_id):
     print "Created archive retrieval job. ID is: %s" % job_id
 
 
-@app.cmd(help="List glacier jobs.")
+@app.cmd(help="List glacier jobs. Once shown as completed by Glacier the output can "
+              "be downloaded. It may take around 4 hours for the Glacier job to complete.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
@@ -341,16 +342,16 @@ def list_jobs(profile):
     print "Found %d jobs" % len(jobs)
 
     for job in jobs:
-        print "Job ID: %s" % job.id
+        print "Glacier Job ID: %s" % job.id
         print "Created: %s" % job.creation_date
         print "Action: %s" % job.action
-        print "Archive ID: %s" % job.archive_id
+        print "AWS Archive ID: %s" % job.archive_id
         try:
             print "Source path: %s" % job.source_path
         except AttributeError:
             pass
-        print "Completed: %s" % job.completed
         print "Status message: %s" % job.status_message
+        print "Glacier job completed: %s" % job.completed
         print
 
 if __name__ == '__main__':

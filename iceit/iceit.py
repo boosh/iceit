@@ -481,7 +481,7 @@ class IceIt(object):
         try:
             self.__open_catalogue()
 
-            # translate AWS archive IDs to file names
+            # translate AWS archive IDs to file names from our catalogue
             for job in jobs:
                 log.debug("Trying to find source_path to match AWS archive ID '%s'" % job.archive_id)
                 row = self.catalogue.find_item(filter_field='aws_archive_id', filter=job.archive_id)
@@ -490,6 +490,8 @@ class IceIt(object):
 
                 if len(row) == 1:
                     job.source_path = row[0][1]
+                elif len(row) == 0:
+                    job.source_path = "AWS archive ID not found in local catalogue"
 
         except Exception as e:
             #@todo rethrow exception
