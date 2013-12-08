@@ -104,7 +104,12 @@ def configure(profile):
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
 def backup_keys(profile):
-    iceit = IceIt(profile)
+    """
+    Backup encryption keys to S3
+
+    :param profile: Name of profile to use for configuration
+    """
+    iceit = __instantiate_iceit(profile)
 
     if not iceit.encryption_enabled():
         print "No encryption keys are configured. Aborting."
@@ -135,6 +140,19 @@ def backup_keys(profile):
             break
 
 
+def __instantiate_iceit(profile):
+    """
+    Instantiates the main object with the given profile and performs error handling.
+    :param profile: Name of the profile to use for configuration
+    :return: A configured IceIt object
+    """
+    iceit = IceIt(profile)
+    if not iceit.is_configured():
+        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+
+    return iceit
+
+
 @app.cmd(help="Backup the given path(s) using the specified backup profile.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "
@@ -142,9 +160,14 @@ def backup_keys(profile):
 @app.cmd_arg('-r', '--recursive', action="store_true", help="Backup directories recursively")
 @app.cmd_arg('paths', type=str, nargs="+", help="Directories/files to backup")
 def backup(profile, recursive, paths):
-    iceit = IceIt(profile)
-    if not iceit.is_configured():
-        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+    """
+    Backup files to glacier
+
+    :param profile: Name of profile to use for configuration
+    :param recursive: Whether to upload directories recursively
+    :param paths: Paths to files/directories to backup
+    """
+    iceit = __instantiate_iceit(profile)
 
     iceit.backup(paths, recursive)
 
@@ -154,9 +177,12 @@ def backup(profile, recursive, paths):
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
 def list_remote_catalogues(profile):
-    iceit = IceIt(profile)
-    if not iceit.is_configured():
-        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+    """
+    List all of the catalogues backed up to S3 that can be restored
+
+    :param profile: Name of profile to use for configuration
+    """
+    iceit = __instantiate_iceit(profile)
 
     catalogues = iceit.list_catalogues()
 
@@ -180,12 +206,15 @@ def list_remote_catalogues(profile):
                                        "your system using different settings.")
 @app.cmd_arg('name', type=str, help="Name of the catalogue file to restore.")
 def restore_remote_catalogue(profile, name):
+    """
+    Restore a catalogue from S3
+
+    :param profile: Name of profile to use for configuration
+    :param name: The name of the profile to restore. See list_remote_catalogues to get the name
+    """
+    iceit = __instantiate_iceit(profile)
 
     log.info("Retrieving catalogue '%s' from bucket" % name)
-
-    iceit = IceIt(profile)
-    if not iceit.is_configured():
-        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
 
     iceit.restore_catalogue(name)
     log.info("Catalogue '%s' restored" % name)
@@ -196,9 +225,12 @@ def restore_remote_catalogue(profile, name):
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
 def list_remote_keys(profile):
-    iceit = IceIt(profile)
-    if not iceit.is_configured():
-        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+    """
+    List encryption keys backed up to S3
+
+    :param profile: Name of profile to use for configuration
+    """
+    iceit = __instantiate_iceit(profile)
 
     keys = iceit.list_keys()
 
@@ -222,10 +254,15 @@ def list_remote_keys(profile):
                                        "your system using different settings.")
 @app.cmd_arg('-f', '--filter', type=str, help="Optional file name filter", default=None)
 @app.cmd_arg('-s', '--succinct', action='store_true', help="Show a compact output", default=False)
-def list_files(profile, filter, succinct):
-    iceit = IceIt(profile)
-    if not iceit.is_configured():
-        raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
+def list_files_in_catalogue(profile, filter, succinct):
+    """
+    List entries in the local catalogue
+
+    :param profile: Name of profile to use for configuration
+    :param filter: A string to optionally filter file names by
+    :param succinct: Whether to hide additional fields
+    """
+    iceit = __instantiate_iceit(profile)
 
     items = iceit.find_in_catalogue(filter=filter)
 
@@ -253,6 +290,20 @@ def list_files(profile, filter, succinct):
         print "Found %d results" % len(items)
     else:
         print "No items were found."
+
+
+@app.cmd(help="Initiate a job to retrieve the glacier inventory (contents of the vault).")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+def get_remote_inventory(profile):
+    """
+    Download the glacier inventory or create a job to do so
+
+    :param profile: Name of profile to use for configuration
+    """
+    iceit = __instantiate_iceit(profile)
+
 
 
 if __name__ == '__main__':
