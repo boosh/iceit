@@ -190,7 +190,7 @@ class GlacierBackend:
     #            log.info("Not completed yet")
     #            return None
     #
-    def create_inventory_retrieval_job(self, sns_topic=None):
+    def create_inventory_retrieval_job(self, sns_topic):
         """
         Initiate a job to retrieve the Glacier inventory.
 

@@ -296,9 +296,6 @@ def list_files_in_catalogue(profile, filter, succinct):
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "
                                        "your system using different settings.")
-#@app.cmd_arg('-j', '--job-id', type=str, help="ID of a job to retrieve the inventory. Provide "
-#                                              "this to actually download the inventory. If not "
-#                                              "provided an inventory download job will be initiated.", default=None)
 def create_inventory_retrieval_job(profile):
     """
     Download the glacier inventory or create a job to do so

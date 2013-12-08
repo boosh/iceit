@@ -199,29 +199,16 @@ class TestGlacierBackend(unittest.TestCase):
         backend = self.test_init_valid()
         backend.upload(fake_file_name)
 
-        backend.vault.concurrent_create_archive_from_file.assert_called_once_with(fake_file_name, '')
+        backend.vault.concurrent_create_archive_from_file.assert_called_once_with(filename=fake_file_name, description='')
 
-    def test_retrieve_inventory_no_job_id(self):
+    def test_create_inventory_retrieval_job(self):
         """
-        Test we initiate an inventory retrieval job if no job ID is supplied
+        Test we can initiate an inventory retrieval job
         """
-        fake_job_id = [None, None]
-        fake_sns_topic = [None, 'fake_topic']
+        fake_sns_topic = ['another_fake_topic', 'fake_topic']
 
-        for i in range(len(fake_job_id)):
+        for sns_topic in fake_sns_topic:
             backend = self.test_init_valid()
-            backend.retrieve_inventory(fake_job_id[i], sns_topic=fake_sns_topic[i])
-            backend.vault.retrieve_inventory.assert_called_once_with(sns_topic=fake_sns_topic[i], description="IceIt inventory job")
-            self.assertFalse(backend.vault.get_job.called)
+            backend.create_inventory_retrieval_job(sns_topic=sns_topic)
+            backend.vault.retrieve_inventory.assert_called_once_with(sns_topic=sns_topic, description="IceIt inventory retrieval job")
 
-    def test_retrieve_inventory_with_job_id(self):
-        """
-        Test we initiate or get the status of an inventory retrieval job
-        """
-        fake_job_id = ['fake_job_id', 'fake_job_id']
-        fake_sns_topic = [None, 'fake_topic']
-
-        for i in range(len(fake_job_id)):
-            backend = self.test_init_valid()
-            backend.retrieve_inventory(fake_job_id[i], sns_topic=fake_sns_topic[i])
-            backend.vault.get_job.assert_called_once_with(fake_job_id[i])
