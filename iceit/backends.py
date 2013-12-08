@@ -161,11 +161,20 @@ class GlacierBackend:
         if not job.completed:
             raise IceItException("Job '%s' hasn't completed. Unable to download" % job.id)
 
-        if job.source_path:
+        try:
             dest_dir = os.path.join(dest_dir, os.path.dirname(job.source_path))
             dest_path = os.path.join(dest_dir, os.path.basename(job.source_path))
-        else:
+        except AttributeError:
+            # handle Inventory retrieval jobs:
+            inventory = job.get_output()
+            log.debug("Retrieved: %s" % inventory)
+
             dest_path = os.path.join(dest_dir, job.id)
+
+            with open(dest_path, 'w') as f:
+                f.write(str(inventory['ArchiveList']))
+
+            return dest_path
 
         log.debug("Will download file to %s" % dest_path)
 

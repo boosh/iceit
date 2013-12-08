@@ -530,7 +530,7 @@ class IceIt(object):
 
             log.info("File downloaded to %s" % dest_path)
 
-            if self.encryptor:
+            if self.encryptor and job.action == 'ArchiveRetrieval':
                 log.info("Decrypting file %s to %s" % (dest_path, original_source_path))
                 self.encryptor.decrypt(input_file=dest_path, output_file=original_source_path)
 
