@@ -486,16 +486,19 @@ class IceIt(object):
 
             # translate AWS archive IDs to file names from our catalogue
             for job in jobs:
-                log.debug("Trying to find source_path to match AWS archive ID '%s'" % job.archive_id)
-                row = self.catalogue.find_item(filter_field='aws_archive_id', filter=job.archive_id)
+                if job.archive_id:
+                    log.debug("Trying to find source_path to match AWS archive ID '%s'" % job.archive_id)
+                    row = self.catalogue.find_item(filter_field='aws_archive_id', filter=job.archive_id)
 
-                log.debug("Found %d results" % len(row))
+                    log.debug("Found %d results" % len(row))
 
-                if len(row) == 1:
-                    job.source_path = row[0][1]
-                    job.source_hash = row[0][4]
-                elif len(row) == 0:
-                    job.source_path = "AWS archive ID not found in local catalogue"
+                    if len(row) == 1:
+                        job.source_path = row[0][1]
+                        job.source_hash = row[0][4]
+                    elif len(row) == 0:
+                        job.source_path = "AWS archive ID not found in local catalogue"
+                    else:
+                        log.warn("Didn't expect to find %d results" % len(row))
 
         except Exception as e:
             #@todo rethrow exception
