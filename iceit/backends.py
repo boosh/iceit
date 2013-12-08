@@ -129,12 +129,18 @@ class GlacierBackend:
 
         while(True):
             try:
-                return self.vault.concurrent_create_archive_from_file(file_name, '')
+                # set the description to an empty string
+                return self.vault.concurrent_create_archive_from_file(filename=file_name, description='')
             except UploadArchiveError as e:
                 if attempt >= max_retries:
+                    log.error("Tried and failed to upload file '%s' %d times." % (file_name, attempt))
                     raise e
 
+                log.info("Received error while trying to upload '%s' to glacier. Will "
+                         "retry %d more times after sleeping a while..." % (file_name, max_retries-attempt))
+
                 attempt += 1
+
                 # exponential back-off on failure
                 sleep(2**attempt)
 
@@ -191,7 +197,7 @@ class GlacierBackend:
             completed and the output is ready to download.
         """
         if job_id is None:
-            return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory job")
+            return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
         else:
             return self.vault.get_job(job_id)
 #

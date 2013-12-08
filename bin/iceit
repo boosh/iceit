@@ -188,7 +188,7 @@ def restore_remote_catalogue(profile, name):
         raise IceItException("Configuration profile '%s' doesn't exist or is corrupt." % profile)
 
     iceit.restore_catalogue(name)
-    log.info("Catalogue restored")
+    log.info("Catalogue '%s' restored" % name)
 
 
 @app.cmd(help="List keys in S3 that can be restored.")
