@@ -199,8 +199,7 @@ class GlacierBackend:
         @return The ID of the created job
         """
         log.debug("Creating job to retrieve glacier inventory for vault '%s' notifying to SNS topic '%s'" % (self.vault_name, sns_topic))
-        job = self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
-        return job.id
+        return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
 
     def create_archive_retrieval_job(self, aws_archive_id, sns_topic):
         """
