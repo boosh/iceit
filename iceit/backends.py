@@ -188,18 +188,14 @@ class GlacierBackend:
     #            log.info("Not completed yet")
     #            return None
     #
-    def retrieve_inventory(self, job_id, sns_topic=None):
+    def create_inventory_retrieval_job(self, sns_topic=None):
         """
-        Initiate a job to retrieve Glacier inventory or return the job if it has already been initialised.
+        Initiate a job to retrieve the Glacier inventory.
 
-        @param string job_id - The AWS job ID of the retrieve_inventory job
         @param string sns_topic - The Amazon SNS topic ARN where Amazon Glacier sends notification when the job is
             completed and the output is ready to download.
         """
-        if job_id is None:
-            return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
-        else:
-            return self.vault.get_job(job_id)
+        return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
 #
 #    def retrieve_archive(self, archive_id, jobid):
 #        """

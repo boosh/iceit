@@ -446,3 +446,13 @@ class IceIt(object):
             log.exception("Caught an exception. Closing catalogue.")
         finally:
             self.catalogue.close()
+
+    def create_inventory_retrieval_job(self):
+        """
+        Create a job to retrieve the glacier inventory.
+
+        :return: ID fo the new inventory retrieval job
+        """
+        self.__initialise_backends()
+
+        return self.glacier_backend.create_inventory_retrieval_job(sns_topic=self.config.get('aws', 'sns_topic_arn'))
