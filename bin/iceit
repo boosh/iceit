@@ -348,9 +348,7 @@ def list_jobs(profile):
         print "Created: %s" % job.creation_date
         print "Action: %s" % job.action
 
-        if job.action == 'InventoryRetrieval':
-            print "Inventory size: %s" % job.inventory_size
-        else:
+        if job.action == 'ArchiveRetrieval':
             print "AWS Archive ID: %s" % job.archive_id
             print "Archive size: %s" % job.archive_size
             try:
