@@ -457,6 +457,17 @@ class IceIt(object):
 
         return self.glacier_backend.create_inventory_retrieval_job(sns_topic=self.config.get('aws', 'sns_topic_arn'))
 
+    def create_archive_retrieval_job(self, aws_archive_id):
+        """
+        Create a job to retrieve an archive from glacier
+
+        :param aws_archive_id: The AWS archive ID of the archive to create a retrieval job for
+        :return: ID fo the new inventory retrieval job
+        """
+        self.__initialise_backends()
+
+        return self.glacier_backend.create_archive_retrieval_job(aws_archive_id=aws_archive_id, sns_topic=self.config.get('aws', 'sns_topic_arn'))
+
     def list_jobs(self):
         """
         List glacier jobs

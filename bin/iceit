@@ -308,6 +308,23 @@ def create_inventory_retrieval_job(profile):
     print "Created inventory retrieval job. ID is: %s" % job_id
 
 
+@app.cmd(help="Initiate a job to retrieve a backup from glacier.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+@app.cmd_arg('aws_archive_id', type=str, help="The AWS archive ID of the archive to create a download job for.")
+def create_archive_retrieval_job(profile, aws_archive_id):
+    """
+    Download the glacier inventory or create a job to do so
+
+    :param profile: Name of profile to use for configuration
+    """
+    iceit = __instantiate_iceit(profile)
+    job_id = iceit.create_archive_retrieval_job(aws_archive_id)
+
+    print "Created archive retrieval job. ID is: %s" % job_id
+
+
 @app.cmd(help="List glacier jobs.")
 @app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
                                        "profiles allow you to back up different parts of "

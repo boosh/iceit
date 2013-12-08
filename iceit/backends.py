@@ -196,9 +196,25 @@ class GlacierBackend:
 
         @param string sns_topic - The Amazon SNS topic ARN where Amazon Glacier sends notification when the job is
             completed and the output is ready to download.
+        @return The ID of the created job
         """
         log.debug("Creating job to retrieve glacier inventory for vault '%s' notifying to SNS topic '%s'" % (self.vault_name, sns_topic))
-        return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
+        job = self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
+        return job.id
+
+    def create_archive_retrieval_job(self, aws_archive_id, sns_topic):
+        """
+        Initiate a job to retrieve an archive from Glacier
+
+        @param string aws_archive_id: The AWS archive ID of the archive to create a job for
+        @param string sns_topic - The Amazon SNS topic ARN where Amazon Glacier sends notification when the job is
+            completed and the output is ready to download.
+        @return The ID of the created job
+        """
+        log.debug("Creating job to retrieve glacier archive '%s' for vault '%s' "
+                  "notifying to SNS topic '%s'" % (aws_archive_id, self.vault_name, sns_topic))
+        job = self.vault.retrieve_archive(archive_id=aws_archive_id, sns_topic=sns_topic, description="IceIt archive retrieval job")
+        return job.id
 
     def list_jobs(self):
         """
