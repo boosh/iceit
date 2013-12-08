@@ -1,11 +1,15 @@
 import boto.glacier
 import boto.s3
 from time import sleep
+import os
 
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
-from boto.glacier.exceptions import UploadArchiveError
+from boto.glacier.exceptions import UploadArchiveError, DownloadArchiveError
+from boto.glacier.concurrent import ConcurrentDownloader
 from tempfile import TemporaryFile
+
+from .exceptions import IceItException
 from .log import get_logger
 
 log = get_logger(__name__)
@@ -146,50 +150,52 @@ class GlacierBackend:
                 # exponential back-off on failure
                 sleep(2**attempt)
 
-    #    def download(self, keyname):
-    #        """
-    #        Initiate a Job, check its status, and download the archive if it's completed.
-    #        """
-    #        archive_id = self.get_archive_id(keyname)
-    #        if not archive_id:
-    #            return
-    #
-    #        with glacier_shelve() as d:
-    #            if not d.has_key("jobs"):
-    #                d["jobs"] = dict()
-    #
-    #            jobs = d["jobs"]
-    #            job = None
-    #
-    #            if keyname in jobs:
-    #                # The job is already in shelve
-    #                job_id = jobs[keyname]
-    #                try:
-    #                    job = self.vault.get_job(job_id)
-    #                except UnexpectedHTTPResponseError: # Return a 404 if the job is no more available
-    #                    del job[keyname]
-    #
-    #            if not job:
-    #                # Job initialization
-    #                job = self.vault.retrieve_archive(archive_id)
-    #                jobs[keyname] = job.id
-    #                job_id = job.id
-    #
-    #            # Commiting changes in shelve
-    #            d["jobs"] = jobs
-    #
-    #        log.info("Job {action}: {status_code} ({creation_date}/{completion_date})".format(**job.__dict__))
-    #
-    #        if job.completed:
-    #            log.info("Downloading...")
-    #            encrypted_out = tempfile.TemporaryFile()
-    #            encrypted_out.write(job.get_output().read())
-    #            encrypted_out.seek(0)
-    #            return encrypted_out
-    #        else:
-    #            log.info("Not completed yet")
-    #            return None
-    #
+    def concurrent_download(self, dest_dir, job):
+        """
+        Concurrently download a job
+
+        :param dest_dir: Destination directory to write the file to
+        :param job: boto.glacier.job.Job object (with a source_path attribute) to download
+        :return: Path to downloaded file
+        """
+        if not job.completed:
+            raise IceItException("Job '%s' hasn't completed. Unable to download" % job.id)
+
+        if job.source_path:
+            dest_dir = os.path.join(dest_dir, os.path.dirname(job.source_path))
+            dest_path = os.path.join(dest_dir, os.path.basename(job.source_path))
+        else:
+            dest_path = os.path.join(dest_dir, job.id)
+
+        log.debug("Will download file to %s" % dest_path)
+
+        if not os.path.exists(dest_dir):
+            log.debug("Creating destination path %s" % dest_dir)
+            os.makedirs(dest_dir)
+
+        downloader = ConcurrentDownloader(job=job)
+
+        log.info("Downloading file from Glacier for job %s to '%s'" % (job.id, dest_path))
+
+        max_retries = 5
+        attempt = 1
+
+        try:
+            downloader.download(os.path.join(dest_dir, dest_path))
+            return dest_path
+        except DownloadArchiveError as e:
+            if attempt >= max_retries:
+                log.error("Tried and failed to download file '%s' %d times." % (dest_path, attempt))
+                raise e
+
+            log.info("Received error while trying to download '%s' from glacier. Will "
+                     "retry %d more times after sleeping a while..." % (dest_path, max_retries-attempt))
+
+            attempt += 1
+
+            # exponential back-off on failure
+            sleep(2**attempt)
+
     def create_inventory_retrieval_job(self, sns_topic):
         """
         Initiate a job to retrieve the Glacier inventory.

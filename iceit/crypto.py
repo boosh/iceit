@@ -119,29 +119,25 @@ class Encryptor(object):
 
         return encrypted_file_name
 
-    def decrypt(self, input_file, output_dir):
+    def decrypt(self, input_file, output_file):
         """
         Decrypt the given file using the private key.
 
         @param string input_file - The file to decrypt.
-        @param string output_dir - The directory to write the decrypted file to.
+        @param string output_file - The path to the file to write the decrypted file to.
         """
         if not self.key_id:
             raise IceItException("Can't decrypt files. Set the key ID first.")
 
-        dest_file_name = os.path.join(output_dir, os.path.basename(input_file))
-        dest_file_name = pipes.quote(dest_file_name)
-
         if not os.path.exists(input_file):
-            raise IceItException("Can't decrypt non-existent file '%s'" % input_file)
+            raise IceItException("Can't decrypt non-existent file %s" % input_file)
 
-        log.info("Decrypting %s to %s" % (input_file, dest_file_name))
+        log.info("Decrypting %s to %s" % (input_file, output_file))
         with open(input_file, 'rb') as file:
             # signature is automatically verified I think
-            result = self.gpg.decrypt_file(file, output=dest_file_name)
+            result = self.gpg.decrypt_file(file, output=output_file)
 
-        if not os.path.exists(dest_file_name) or os.path.getsize(dest_file_name) == 0:
+        if not os.path.exists(output_file) or os.path.getsize(output_file) == 0:
             raise IceItException("Failed to decrypt file. Perhaps you specified a key that needs a passphrase?")
 
-        log.info("Encryption complete.")
-        return dest_file_name
+        log.info("Decryption complete.")

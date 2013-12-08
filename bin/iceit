@@ -346,13 +346,57 @@ def list_jobs(profile):
         print "Created: %s" % job.creation_date
         print "Action: %s" % job.action
         print "AWS Archive ID: %s" % job.archive_id
+        print "Archive size: %s" % job.archive_size
         try:
             print "Source path: %s" % job.source_path
         except AttributeError:
             pass
-        print "Status message: %s" % job.status_message
         print "Glacier job completed: %s" % job.completed
         print
+
+
+@app.cmd(help="Download files associated with completed glacier jobs.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+@app.cmd_arg('dest', type=str, help="destectory to write the file to. The file name saved in "
+                                   "the catalogue will be used if available (including "
+                                   "destectories).")
+@app.cmd_arg('job_ids', metavar="job_id", type=str, nargs="+", help="ID of a completed glacier job to download the file for.")
+def download(profile, dest, job_ids):
+    """
+    Download files associated with completed jobs from glacier
+
+    :param profile: Name of profile to use for configuration
+    :param dest: destectory to write files to
+    :param job_ids: IDs of completed glacier jobs to download files for
+    """
+    iceit = __instantiate_iceit(profile)
+
+    jobs = iceit.list_jobs()
+
+    found_jobs = []
+    uncompleted_jobs = []
+
+    log.debug("Verifying status of all supplied job IDs")
+    for job_id in job_ids:
+        for job in jobs:
+            if job_id == job.id:
+                log.debug("Found job with ID %s" % job.id)
+                found_jobs.append(job)
+                if job.completed == False:
+                    log.debug("Job %s hasn't completed yet" % job.id)
+                    uncompleted_jobs.append(job.id)
+                    break
+
+    if len(uncompleted_jobs) != 0:
+        print "Error: The following jobs haven't yet completed: %s" % ', '.join(uncompleted_jobs)
+        return 1
+
+    if len(found_jobs) != len(job_ids):
+        print "Error: Couldn't find the following jobs: %s" % ', '.join(set(job_ids) - set(found_jobs))
+
+    iceit.download(dest=dest, jobs=found_jobs)
 
 if __name__ == '__main__':
     app.run()

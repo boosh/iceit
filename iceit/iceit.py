@@ -12,6 +12,7 @@ from time import strftime
 from .config import Config
 from .catalogue import Catalogue
 from .crypto import Encryptor
+from .exceptions import IceItException
 from .utils import SetUtils, StringUtils, FileFinder, FileUtils
 from .backends import GlacierBackend, S3Backend
 from .log import get_logger
@@ -40,7 +41,8 @@ class IceIt(object):
         try:
             self.encryptor = Encryptor(self.config.get('encryption', 'key_id'))
         except ConfigParser.NoSectionError:
-            self.encryptor = Encryptor(None)
+            #@todo: add conditionals to places that use this object
+            self.encryptor = None
 
         self.catalogue = None           # Need to open it when need it because if there's no config we'll be in trouble
 
@@ -384,8 +386,9 @@ class IceIt(object):
         log.info("Retrieving file '%s' to temporary path '%s'" % (name, temp_file_path))
         self.s3_backend.get_to_file(name, temp_file_path)
 
+        decrypted_archive = "%s.decrypted" % temp_file_path
         log.info("Decrypting retrieved archive")
-        decrypted_archive = self.encryptor.decrypt(input_file=temp_file_path, output_dir=os.path.dirname(temp_file_path))
+        self.encryptor.decrypt(input_file=temp_file_path, output_file=decrypted_archive)
 
         log.info("Extracting decrypted archive")
 
@@ -490,6 +493,7 @@ class IceIt(object):
 
                 if len(row) == 1:
                     job.source_path = row[0][1]
+                    job.source_hash = row[0][4]
                 elif len(row) == 0:
                     job.source_path = "AWS archive ID not found in local catalogue"
 
@@ -500,3 +504,45 @@ class IceIt(object):
             self.catalogue.close()
 
         return jobs
+
+    def download(self, dest, jobs):
+        """
+        Download the given jobs
+        :param dest: Directory to write files to
+        :param jobs: List of completed boto.glacier.job.Job objects to download and decrypt
+        :return:
+        """
+        dest = os.path.expanduser(dest)
+
+        if not os.path.exists(dest):
+            log.fatal("Destination directory '%s' doesn't exist" % dest)
+
+        log.info("Downloading jobs...")
+
+        for job in jobs:
+            if self.encryptor and job.action == 'ArchiveRetrieval':
+                original_source_path = os.path.join(dest, job.source_path.lstrip('/'))
+
+                log.debug("Altering job source path to include .enc extension")
+                job.source_path = "%s.enc" % original_source_path
+
+            dest_path = self.glacier_backend.concurrent_download(dest, job)
+
+            log.info("File downloaded to %s" % dest_path)
+
+            if self.encryptor:
+                log.info("Decrypting file %s to %s" % (dest_path, original_source_path))
+                self.encryptor.decrypt(input_file=dest_path, output_file=original_source_path)
+
+                log.info("File decrypted. Verifying checksum.")
+                downloaded_hash = FileUtils.get_file_hash(original_source_path)
+                if not job.source_hash == downloaded_hash:
+                    msg = "Error: Verification of hash for %s failed. Expected %s, " \
+                          "calculated %s" % (original_source_path, job.source_hash, downloaded_hash)
+                    log.warn(msg)
+                    raise IceItException(msg)
+
+                log.info("File hash validation passed")
+
+                log.debug("Removing downloaded encrypted file %s" % dest_path)
+                os.unlink(dest_path)
