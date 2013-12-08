@@ -311,5 +311,25 @@ def create_inventory_retrieval_job(profile):
     print "Created inventory retrieval job. ID is: %s" % job_id
 
 
+@app.cmd(help="List glacier jobs.")
+@app.cmd_arg('profile', type=str, help="Configuration profile name. Configuration "
+                                       "profiles allow you to back up different parts of "
+                                       "your system using different settings.")
+def list_jobs(profile):
+    """
+    List glacier jobs
+
+    :param profile: Name of profile to use for configuration
+    """
+    iceit = __instantiate_iceit(profile)
+    jobs = iceit.list_jobs()
+
+    table = PrettyTable(['Created', 'Job ID', 'Description', 'Action', 'Completed', 'Status message'])
+
+    for job in jobs:
+        table.add_row([job.creation_date, job.id, job.description, job.action, job.completed, job.status_message])
+
+    print table
+
 if __name__ == '__main__':
     app.run()

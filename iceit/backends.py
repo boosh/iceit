@@ -111,6 +111,8 @@ class GlacierBackend:
             aws_secret_access_key=secret_key, region_name=region_name)
         log.info("Connection established.")
 
+        self.vault_name = vault_name
+
         log.info("Creating vault '%s' if it doesn't exist (nothing will be done if it does)" % vault_name)
         self.vault = conn.create_vault(vault_name)
         log.info("Vault creation request complete.")
@@ -195,7 +197,18 @@ class GlacierBackend:
         @param string sns_topic - The Amazon SNS topic ARN where Amazon Glacier sends notification when the job is
             completed and the output is ready to download.
         """
+        log.debug("Creating job to retrieve glacier inventory for vault '%s' notifying to SNS topic '%s'" % (self.vault_name, sns_topic))
         return self.vault.retrieve_inventory(sns_topic=sns_topic, description="IceIt inventory retrieval job")
+
+    def list_jobs(self):
+        """
+        List the status of jobs associated with this vault
+
+        @:return: list of boto.glacier.job.Job objects
+        """
+        log.debug("Listing jobs associated with vault '%s'" % self.vault_name)
+        return self.vault.list_jobs()
+
 #
 #    def retrieve_archive(self, archive_id, jobid):
 #        """

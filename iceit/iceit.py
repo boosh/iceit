@@ -456,3 +456,13 @@ class IceIt(object):
         self.__initialise_backends()
 
         return self.glacier_backend.create_inventory_retrieval_job(sns_topic=self.config.get('aws', 'sns_topic_arn'))
+
+    def list_jobs(self):
+        """
+        List glacier jobs
+
+        :return: List of boto.glacier.job.Job objects
+        """
+        self.__initialise_backends()
+
+        return self.glacier_backend.list_jobs()
